@@ -1,0 +1,11 @@
+node_modules/
+dist/
+apify_storage/
+cypress_storage/
+packages/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+storage/

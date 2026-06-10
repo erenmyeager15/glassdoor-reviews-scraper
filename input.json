@@ -1,0 +1,11 @@
+{
+  "companyNames": ["Google"],
+  "maxReviewsPerCompany": 20,
+  "filterByEmploymentStatus": "",
+  "filterByJobTitle": "",
+  "filterByLocation": "",
+  "proxyConfiguration": {
+    "useApifyProxy": true,
+    "apifyProxyGroups": ["RESIDENTIAL"]
+  }
+}

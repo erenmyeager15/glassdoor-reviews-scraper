@@ -1,0 +1,65 @@
+{
+    "title": "Glassdoor Reviews Scraper",
+    "description": "Provide Glassdoor company reviews-page URLs (recommended) or company names, and choose how many reviews to extract.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "companyUrls": {
+            "title": "Company Glassdoor URLs",
+            "description": "Glassdoor company reviews page URLs, e.g. https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm",
+            "type": "array",
+            "editor": "stringList",
+            "prefill": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
+            "default": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"]
+        },
+        "companyNames": {
+            "title": "Company Names",
+            "description": "Company names to search on Glassdoor. Direct URLs are more reliable than names.",
+            "type": "array",
+            "editor": "stringList",
+            "default": []
+        },
+        "maxReviewsPerCompany": {
+            "title": "Max Reviews Per Company",
+            "description": "Maximum reviews to scrape per company. Set to 0 for all available (public) reviews.",
+            "type": "integer",
+            "editor": "number",
+            "default": 50,
+            "minimum": 0,
+            "maximum": 10000
+        },
+        "filterByEmploymentStatus": {
+            "title": "Filter by Employment Status",
+            "description": "Only keep reviews from employees with this status.",
+            "type": "string",
+            "editor": "select",
+            "default": "",
+            "enum": ["", "current", "former"],
+            "enumTitles": ["All", "Current Employees", "Former Employees"]
+        },
+        "filterByJobTitle": {
+            "title": "Filter by Job Title",
+            "description": "Only keep reviews whose job title contains this text (case-insensitive). Leave empty for all.",
+            "type": "string",
+            "editor": "textfield",
+            "default": ""
+        },
+        "filterByLocation": {
+            "title": "Filter by Location",
+            "description": "Only keep reviews whose location contains this text (case-insensitive). Leave empty for all.",
+            "type": "string",
+            "editor": "textfield",
+            "default": ""
+        },
+        "proxyConfiguration": {
+            "title": "Proxy Configuration",
+            "description": "Glassdoor uses Cloudflare protection, so residential proxies are strongly recommended.",
+            "type": "object",
+            "editor": "proxy",
+            "default": {
+                "useApifyProxy": true,
+                "apifyProxyGroups": ["RESIDENTIAL"]
+            }
+        }
+    }
+}

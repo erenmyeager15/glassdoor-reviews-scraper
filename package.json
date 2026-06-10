@@ -1,0 +1,26 @@
+{
+  "name": "glassdoor-scraper",
+  "version": "1.0.0",
+  "description": "Apify Actor for scraping Glassdoor company reviews and employer data",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node dist/main.js",
+    "build": "tsc",
+    "test": "echo \"No tests yet\"",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "apify": "^3.1.0",
+    "crawlee": "^3.11.0",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  },
+  "author": "glassdoor-scraper-developer",
+  "license": "Apache-2.0",
+  "readmeFilename": "README.md"
+}

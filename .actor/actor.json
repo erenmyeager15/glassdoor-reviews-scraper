@@ -1,0 +1,74 @@
+{
+    "actorSpecification": 1,
+    "name": "glassdoor-reviews-scraper",
+    "title": "Glassdoor Reviews Scraper - Ratings, Pros & Cons",
+    "description": "Scrape Glassdoor company reviews: ratings, pros, cons, job titles, employment status, location, and dates. No login or API key needed. Export to JSON, CSV, or Excel.",
+    "version": "1.0",
+    "categories": ["BUSINESS", "JOBS", "LEAD_GENERATION"],
+    "dockerfile": "Dockerfile",
+    "input": "../INPUT_SCHEMA.json",
+    "storages": {
+        "dataset": {
+            "actorSpecification": 1,
+            "views": {
+                "reviews": {
+                    "title": "Reviews",
+                    "transformation": {
+                        "fields": [
+                            "reviewId",
+                            "companyName",
+                            "overallRating",
+                            "headline",
+                            "pros",
+                            "cons",
+                            "jobTitle",
+                            "employmentStatus",
+                            "employmentTenure",
+                            "location",
+                            "reviewDate",
+                            "reviewUrl",
+                            "scrapedAt"
+                        ]
+                    },
+                    "display": {
+                        "component": "table",
+                        "properties": {
+                            "reviewId": { "label": "Review ID", "format": "text" },
+                            "companyName": { "label": "Company", "format": "text" },
+                            "overallRating": { "label": "Rating", "format": "number" },
+                            "headline": { "label": "Headline", "format": "text" },
+                            "pros": { "label": "Pros", "format": "text" },
+                            "cons": { "label": "Cons", "format": "text" },
+                            "jobTitle": { "label": "Job Title", "format": "text" },
+                            "employmentStatus": { "label": "Status", "format": "text" },
+                            "employmentTenure": { "label": "Tenure", "format": "text" },
+                            "location": { "label": "Location", "format": "text" },
+                            "reviewDate": { "label": "Date", "format": "text" },
+                            "reviewUrl": { "label": "URL", "format": "link" },
+                            "scrapedAt": { "label": "Scraped At", "format": "text" }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "pricingInfo": {
+        "pricingModel": "PAY_PER_EVENT",
+        "pricingPerEvent": {
+            "actorChargeEvents": {
+                "review-scraped": {
+                    "eventTitle": "Review Scraped",
+                    "eventDescription": "Charged for each Glassdoor review successfully extracted and saved to the dataset.",
+                    "eventPriceUsd": 0.004
+                }
+            }
+        }
+    },
+    "defaultRunOptions": {
+        "build": "latest",
+        "memoryMbytes": 4096,
+        "timeoutSecs": 3600
+    },
+    "minMemoryMbytes": 2048,
+    "maxMemoryMbytes": 8192
+}
