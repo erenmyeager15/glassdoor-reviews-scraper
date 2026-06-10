@@ -48,7 +48,7 @@ Actor.main(async () => {
         maxRequestsPerMinute: 20,
         navigationTimeoutSecs: 90,
         requestHandlerTimeoutSecs: 240,
-        maxRequestRetries: 8,
+        maxRequestRetries: 3,
         sessionPoolOptions: {
             maxPoolSize: 30,
             // Cloudflare serves the interstitial with a 403; don't retire sessions on it -

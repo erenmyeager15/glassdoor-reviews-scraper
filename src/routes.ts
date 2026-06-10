@@ -236,16 +236,11 @@ export function buildHandler(input: ActorInput) {
 
         log.info(`Pushed ${newCount} new reviews (total ${collectedIds.length}/${maxReviews === Number.POSITIVE_INFINITY ? 'all' : maxReviews}) for ${companyName}`);
 
-        // Pagination: stop if we hit the cap, found no new reviews, or no review cards at all.
-        if (collectedIds.length >= maxReviews || newCount === 0 || reviews.length === 0) return;
-
-        const nextUrl = pageUrl(userData.companyUrl || request.url, pageNum + 1);
-        await crawler.addRequests([
-            {
-                url: nextUrl,
-                uniqueKey: `${userData.companyUrl || request.url}#P${pageNum + 1}`,
-                userData: { ...userData, label: 'COMPANY', pageNum: pageNum + 1, collectedIds },
-            },
-        ]);
+        // NOTE: Pagination is intentionally disabled. Glassdoor login-walls review pages
+        // beyond the first (and Cloudflare rarely clears on _P2+), so paginating just burns
+        // credits without returning data. Re-enabling requires Glassdoor login cookies and a
+        // paid Cloudflare unblocker. See RESUME-NOTES.md. The helpers below are kept for that.
+        void pageUrl;
+        void crawler;
     };
 }
