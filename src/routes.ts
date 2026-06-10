@@ -44,9 +44,9 @@ async function clearCloudflare(page: PlaywrightCrawlingContext['page'], log = de
             if (!challengeRe.test(title)) return true;
         }
 
-        // Still challenged - give the challenge JS a moment, then reload once or twice.
+        // Still challenged - give the challenge JS a moment, then reload a few times.
         await delay(3000);
-        if (reloads < 2 && Date.now() < deadline - 8000) {
+        if (reloads < 3 && Date.now() < deadline - 8000) {
             reloads++;
             log.info(`Cloudflare challenge still up, reloading (attempt ${reloads})...`);
             await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => null);

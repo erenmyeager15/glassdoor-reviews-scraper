@@ -23,7 +23,7 @@ Actor.main(async () => {
     // Glassdoor is behind a Cloudflare managed challenge - residential proxies + a real
     // (xvfb-headed) browser are required. Default to Apify residential proxies.
     const proxyConfiguration = await Actor.createProxyConfiguration(
-        input.proxyConfiguration ?? { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
+        input.proxyConfiguration ?? { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'US' },
     );
 
     const requests = [
@@ -48,7 +48,7 @@ Actor.main(async () => {
         maxRequestsPerMinute: 20,
         navigationTimeoutSecs: 90,
         requestHandlerTimeoutSecs: 240,
-        maxRequestRetries: 4,
+        maxRequestRetries: 8,
         sessionPoolOptions: {
             maxPoolSize: 30,
             // Cloudflare serves the interstitial with a 403; don't retire sessions on it -

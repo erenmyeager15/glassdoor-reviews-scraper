@@ -5,5 +5,5 @@
     "filterByEmploymentStatus": "",
     "filterByJobTitle": "",
     "filterByLocation": "",
-    "proxyConfiguration": { "useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"] }
+    "proxyConfiguration": { "useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"], "apifyProxyCountry": "US" }
 }
