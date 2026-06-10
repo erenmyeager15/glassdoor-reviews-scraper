@@ -144,8 +144,10 @@ export function buildHandler(input: ActorInput) {
                 header.total,
                 request.url,
             );
-            const companyDataset = await Actor.openDataset('companies');
-            await companyDataset.pushData(companyRecord);
+            // Save company summary to the key-value store (named datasets aren't writable
+            // under Apify's limited-permission run token). Reviews go to the default dataset.
+            const slug = (companyRecord.companyName || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            await Actor.setValue(`company-${slug || 'unknown'}`, companyRecord).catch(() => null);
             userData.companyName = companyRecord.companyName;
             log.info(`Company: ${companyRecord.companyName} | rating ${companyRecord.overallRating ?? 'n/a'}`);
         }

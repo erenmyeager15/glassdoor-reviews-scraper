@@ -17,7 +17,7 @@ Perfect for **employer branding, HR benchmarking, competitor research, sentiment
 
 ## What it extracts
 
-### Company record (Companies dataset tab)
+### Company record (saved to the key-value store as `company-<name>`)
 - Company name and Glassdoor URL
 - Overall rating
 - Recommend-to-friend %
