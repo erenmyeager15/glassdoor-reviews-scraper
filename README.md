@@ -126,6 +126,14 @@ You are only charged for reviews actually extracted - never for blocked or empty
 - Job-market intelligence - understand culture, management, and work-life balance trends
 - Competitor research - track rival employers' reputation over time
 
+## How to Scrape Glassdoor Reviews (Step by Step)
+
+1. Click **Try for free** / **Run**.
+2. Paste one or more Glassdoor reviews-page URLs into `companyUrls` (e.g. `https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm`), or add `companyNames` to search.
+3. Set `maxReviewsPerCompany` (start small to test).
+4. Optionally paste authenticated `glassdoorCookies` for deeper pagination, and set `filterByEmploymentStatus`, `filterByJobTitle`, or `filterByLocation`.
+5. Run the Actor, then export results as JSON, CSV, Excel, or HTML, or pull them via the Apify API.
+
 ## Tips
 
 - Glassdoor uses Cloudflare protection - keep residential proxies enabled for reliable results.
