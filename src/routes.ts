@@ -63,6 +63,10 @@ function pageUrl(baseUrl: string, pageNum: number): string {
     return clean.replace(/\.htm(\?|$)/i, `_P${pageNum}.htm$1`);
 }
 
+function hasGlassdoorCookies(input: ActorInput): boolean {
+    return Boolean(input.glassdoorCookies?.trim());
+}
+
 function extractCompany(rawName: string, rawRating: number | null, recommend: number | null, ceo: number | null, total: number | null, url: string): CompanyRecord {
     return {
         companyName: (rawName || '').replace(/\s*Reviews\s*$/i, '').trim() || rawName,
@@ -76,11 +80,12 @@ function extractCompany(rawName: string, rawRating: number | null, recommend: nu
 }
 
 export function buildHandler(input: ActorInput) {
-    const rawMax = input.maxReviewsPerCompany ?? 100;
+    const rawMax = input.maxReviewsPerCompany ?? 10;
     const maxReviews = rawMax === 0 ? Number.POSITIVE_INFINITY : rawMax;
     const fStatus = (input.filterByEmploymentStatus || '').toLowerCase();
     const fTitle = (input.filterByJobTitle || '').toLowerCase();
     const fLoc = (input.filterByLocation || '').toLowerCase();
+    const canPaginate = hasGlassdoorCookies(input);
 
     return async (context: PlaywrightCrawlingContext): Promise<void> => {
         const { page, request, log, session, crawler } = context;
@@ -236,11 +241,37 @@ export function buildHandler(input: ActorInput) {
 
         log.info(`Pushed ${newCount} new reviews (total ${collectedIds.length}/${maxReviews === Number.POSITIVE_INFINITY ? 'all' : maxReviews}) for ${companyName}`);
 
-        // NOTE: Pagination is intentionally disabled. Glassdoor login-walls review pages
-        // beyond the first (and Cloudflare rarely clears on _P2+), so paginating just burns
-        // credits without returning data. Re-enabling requires Glassdoor login cookies and a
-        // paid Cloudflare unblocker. See RESUME-NOTES.md. The helpers below are kept for that.
-        void pageUrl;
-        void crawler;
+        if (!canPaginate) {
+            if (pageNum === 1 && collectedIds.length < maxReviews) {
+                log.info('Pagination skipped because no Glassdoor auth cookies were supplied. Anonymous runs are limited to page 1.');
+            }
+            return;
+        }
+
+        if (newCount === 0) {
+            log.info(`Stopping pagination for ${companyName}: page ${pageNum} had no new reviews.`);
+            return;
+        }
+
+        if (collectedIds.length >= maxReviews) {
+            log.info(`Stopping pagination for ${companyName}: reached requested max reviews.`);
+            return;
+        }
+
+        const nextPageNum = pageNum + 1;
+        const nextUrl = pageUrl(userData.companyUrl || request.url, nextPageNum);
+        await crawler.addRequests([
+            {
+                url: nextUrl,
+                userData: {
+                    ...userData,
+                    label: 'COMPANY',
+                    companyUrl: userData.companyUrl || request.url,
+                    pageNum: nextPageNum,
+                    collectedIds,
+                },
+            },
+        ]);
+        log.info(`Queued page ${nextPageNum} for ${companyName}: ${nextUrl}`);
     };
 }

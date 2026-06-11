@@ -1,9 +1,5 @@
 {
-    "companyUrls": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
-    "companyNames": [],
-    "maxReviewsPerCompany": 5,
-    "filterByEmploymentStatus": "",
-    "filterByJobTitle": "",
-    "filterByLocation": "",
-    "proxyConfiguration": { "useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"], "apifyProxyCountry": "US" }
+  "companyUrls": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
+  "maxReviewsPerCompany": 5,
+  "proxyConfiguration": { "useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"], "apifyProxyCountry": "US" }
 }

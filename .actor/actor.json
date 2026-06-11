@@ -2,7 +2,7 @@
     "actorSpecification": 1,
     "name": "glassdoor-reviews-scraper",
     "title": "Glassdoor Reviews Scraper - Ratings, Pros & Cons",
-    "description": "Scrape Glassdoor company reviews: ratings, pros, cons, job titles, employment status, location, and dates. No login or API key needed. Export to JSON, CSV, or Excel.",
+    "description": "Scrape Glassdoor company reviews: ratings, pros, cons, job titles, employment status, location, and dates. Anonymous runs scrape public page-1 reviews; authenticated cookies enable pagination.",
     "version": "1.0",
     "categories": ["BUSINESS", "JOBS", "LEAD_GENERATION"],
     "dockerfile": "Dockerfile",

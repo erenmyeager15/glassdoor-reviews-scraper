@@ -5,6 +5,7 @@ export interface ActorInput {
     filterByEmploymentStatus?: '' | 'current' | 'former';
     filterByJobTitle?: string;
     filterByLocation?: string;
+    glassdoorCookies?: string;
     proxyConfiguration?: {
         useApifyProxy: boolean;
         apifyProxyGroups?: string[];

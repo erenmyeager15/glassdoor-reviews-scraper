@@ -1,6 +1,6 @@
 {
     "title": "Glassdoor Reviews Scraper",
-    "description": "Provide Glassdoor company reviews-page URLs (recommended) or company names, and choose how many reviews to extract.",
+    "description": "Provide Glassdoor company reviews-page URLs (recommended) or company names. Anonymous runs scrape public page-1 reviews; add Glassdoor cookies for authenticated pagination.",
     "type": "object",
     "schemaVersion": 1,
     "properties": {
@@ -21,12 +21,19 @@
         },
         "maxReviewsPerCompany": {
             "title": "Max Reviews Per Company",
-            "description": "Maximum reviews to scrape per company. Set to 0 for all available (public) reviews.",
+            "description": "Maximum reviews to scrape per company. Anonymous runs are limited to public page-1 reviews; authenticated cookie runs can paginate deeper.",
             "type": "integer",
             "editor": "number",
-            "default": 50,
+            "default": 10,
             "minimum": 0,
             "maximum": 10000
+        },
+        "glassdoorCookies": {
+            "title": "Glassdoor Cookies",
+            "description": "Optional authenticated Glassdoor cookies. Paste either a browser Cookie header (name=value; name2=value2) or a JSON cookie array. Required for page 2+ pagination.",
+            "type": "string",
+            "editor": "textarea",
+            "isSecret": true
         },
         "filterByEmploymentStatus": {
             "title": "Filter by Employment Status",
