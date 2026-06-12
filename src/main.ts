@@ -3,6 +3,8 @@ import { PlaywrightCrawler } from 'crawlee';
 import type { ActorInput } from './types.js';
 import { buildHandler } from './routes.js';
 
+const MAINTENANCE_MESSAGE = 'Under maintenance. This Actor is temporarily unavailable and no data was collected.';
+
 interface BrowserCookie {
     name: string;
     value: string;
@@ -81,6 +83,10 @@ function parseGlassdoorCookies(rawCookies: string | undefined): BrowserCookie[] 
 }
 
 Actor.main(async () => {
+    await Actor.setStatusMessage(MAINTENANCE_MESSAGE);
+    log.warning(MAINTENANCE_MESSAGE);
+    return;
+
     const input = ((await Actor.getInput<ActorInput>()) ?? {}) as ActorInput;
     const glassdoorCookies = parseGlassdoorCookies(input.glassdoorCookies);
 

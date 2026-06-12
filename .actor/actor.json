@@ -1,8 +1,8 @@
 {
     "actorSpecification": 1,
     "name": "glassdoor-reviews-scraper",
-    "title": "Glassdoor Reviews Scraper - Ratings, Pros & Cons",
-    "description": "Scrape Glassdoor company reviews: ratings, pros, cons, job titles, employment status, location, and dates. Anonymous runs scrape public page-1 reviews; authenticated cookies enable pagination.",
+    "title": "Glassdoor Reviews Scraper - Under Maintenance",
+    "description": "Temporarily under maintenance. Runs exit without scraping, saving records, or charging review-scraped events.",
     "version": "1.0",
     "categories": ["BUSINESS", "JOBS"],
     "dockerfile": "Dockerfile",
