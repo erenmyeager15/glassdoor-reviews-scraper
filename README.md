@@ -140,6 +140,12 @@ You are only charged for reviews actually extracted - never for blocked or empty
 - Direct Glassdoor reviews-page URLs are more reliable than company-name search.
 - Without `glassdoorCookies`, Glassdoor usually exposes only page 1 of reviews. Add authenticated cookies for deeper pagination.
 
+## Responsible Use
+
+This Actor is intended for lawful collection of publicly available information only. Users are responsible for ensuring their use complies with the source website's terms, robots.txt, applicable privacy laws, including India's DPDP Act, and all local regulations.
+
+Do not use this Actor to collect, store, sell, or misuse personal data without a lawful basis. The Actor author is not responsible for misuse by end users.
+
 ## License
 
 Apache-2.0

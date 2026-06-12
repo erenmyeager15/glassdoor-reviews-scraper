@@ -4,7 +4,7 @@
     "title": "Glassdoor Reviews Scraper - Ratings, Pros & Cons",
     "description": "Scrape Glassdoor company reviews: ratings, pros, cons, job titles, employment status, location, and dates. Anonymous runs scrape public page-1 reviews; authenticated cookies enable pagination.",
     "version": "1.0",
-    "categories": ["BUSINESS", "JOBS", "LEAD_GENERATION"],
+    "categories": ["BUSINESS", "JOBS"],
     "dockerfile": "Dockerfile",
     "input": "../INPUT_SCHEMA.json",
     "storages": {
