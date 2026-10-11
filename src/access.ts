@@ -33,6 +33,11 @@ interface ClientState {
 
 const clients = new Map<string, ClientState>();
 
+// Challenge-solving requests can approach the old 40-second ceiling even on
+// successful runs. Give a single managed request headroom, never an extra retry;
+// requestLimits still caps it to the remaining collection deadline.
+export const UNBLOCKER_REQUEST_TIMEOUT_MS = 75_000;
+
 function proxyLabel(value: ProxyConfigInput): string {
     if (value.proxyUrls?.length) return 'custom proxy';
     if (value.useApifyProxy === false) return 'direct';
@@ -71,7 +76,7 @@ export async function buildAccessTiers(input: NormalizedInput): Promise<AccessTi
                 stickySession: !isUnblocker,
                 bootstrap: !isUnblocker,
                 htmlFallback: !isUnblocker,
-                requestTimeoutMs: isUnblocker ? 40_000 : 20_000,
+                requestTimeoutMs: isUnblocker ? UNBLOCKER_REQUEST_TIMEOUT_MS : 20_000,
                 ignoreTlsErrors: isUnblocker,
             },
         )];
@@ -86,7 +91,7 @@ export async function buildAccessTiers(input: NormalizedInput): Promise<AccessTi
                 stickySession: false,
                 bootstrap: false,
                 htmlFallback: false,
-                requestTimeoutMs: 40_000,
+                requestTimeoutMs: UNBLOCKER_REQUEST_TIMEOUT_MS,
                 ignoreTlsErrors: true,
             })];
         } catch {
@@ -126,7 +131,18 @@ async function clientFor(tier: AccessTier, sessionId: string): Promise<ClientSta
     return state;
 }
 
-async function bootstrapSession(tier: AccessTier, targetUrl: string, sessionId: string): Promise<void> {
+export function requestTimeout(tier: Pick<AccessTier, 'requestTimeoutMs'>, deadline = Infinity, now = Date.now()): number {
+    const remaining = deadline - now;
+    if (remaining <= 0) throw new Error('Configured Glassdoor run-time limit reached before the request.');
+    return Math.max(1, Math.min(tier.requestTimeoutMs, remaining));
+}
+
+export function requestLimits(tier: Pick<AccessTier, 'requestTimeoutMs'>, deadline = Infinity, now = Date.now()) {
+    const timeout = requestTimeout(tier, deadline, now);
+    return { timeout, signal: AbortSignal.timeout(timeout) };
+}
+
+async function bootstrapSession(tier: AccessTier, targetUrl: string, sessionId: string, deadline = Infinity): Promise<void> {
     if (!tier.bootstrap) return;
     const origin = new URL(targetUrl).origin;
     const state = await clientFor(tier, sessionId);
@@ -134,6 +150,7 @@ async function bootstrapSession(tier: AccessTier, targetUrl: string, sessionId: 
     state.bootstrappedOrigins.add(origin);
     try {
         const response = await state.client.fetch(`${origin}/`, {
+            ...requestLimits(tier, deadline),
             headers: {
                 accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 referer: `${origin}/`,
@@ -148,10 +165,11 @@ async function bootstrapSession(tier: AccessTier, targetUrl: string, sessionId: 
     }
 }
 
-async function request(tier: AccessTier, url: string, sessionId: string, options: { method?: 'GET' | 'POST'; body?: string; referer?: string } = {}): Promise<AccessResponse> {
+async function request(tier: AccessTier, url: string, sessionId: string, options: { method?: 'GET' | 'POST'; body?: string; referer?: string } = {}, deadline = Infinity): Promise<AccessResponse> {
     const { client } = await clientFor(tier, sessionId);
     const origin = new URL(url).origin;
     const response = await client.fetch(url, {
+        ...requestLimits(tier, deadline),
         method: options.method ?? 'GET',
         ...(options.body ? { body: options.body } : {}),
         headers: {
@@ -171,8 +189,8 @@ async function request(tier: AccessTier, url: string, sessionId: string, options
     return { statusCode: response.status, body, finalUrl: response.url };
 }
 
-export async function fetchHtml(tier: AccessTier, url: string, sessionId: string): Promise<AccessResponse> {
-    const response = await request(tier, url, sessionId);
+export async function fetchHtml(tier: AccessTier, url: string, sessionId: string, deadline = Infinity): Promise<AccessResponse> {
+    const response = await request(tier, url, sessionId, {}, deadline);
     if (isBlockedGlassdoorPage(response.statusCode, response.body)) {
         throw new Error(`Glassdoor access blocked on ${tier.label} (HTTP ${response.statusCode}).`);
     }
@@ -204,14 +222,14 @@ export function buildBffPayload(employerId: number, page: number, pageSize: numb
     };
 }
 
-export async function fetchBff(tier: AccessTier, companyUrl: string, employerId: number, page: number, pageSize: number, sessionId: string): Promise<unknown> {
-    await bootstrapSession(tier, companyUrl, sessionId);
+export async function fetchBff(tier: AccessTier, companyUrl: string, employerId: number, page: number, pageSize: number, sessionId: string, deadline = Infinity): Promise<unknown> {
+    await bootstrapSession(tier, companyUrl, sessionId, deadline);
     const origin = new URL(companyUrl).origin;
     const response = await request(tier, `${origin}/bff/employer-profile-mono/employer-reviews`, sessionId, {
         method: 'POST',
         body: JSON.stringify(buildBffPayload(employerId, page, pageSize)),
         referer: companyUrl,
-    });
+    }, deadline);
     if (isBlockedGlassdoorPage(response.statusCode, response.body)) {
         throw new Error(`Glassdoor reviews API blocked on ${tier.label} (HTTP ${response.statusCode}).`);
     }
@@ -228,14 +246,14 @@ export async function fetchBff(tier: AccessTier, companyUrl: string, employerId:
     return parsed;
 }
 
-export async function resolveCompanyName(tiers: AccessTier[], name: string): Promise<string | null> {
+export async function resolveCompanyName(tiers: AccessTier[], name: string, deadline = Infinity): Promise<string | null> {
     const endpoint = `https://www.glassdoor.com/searchsuggest/typeahead?numSuggestions=8&source=GD_V2&version=NEW&rf=full&fallback=token&input=${encodeURIComponent(name)}`;
     for (let index = 0; index < tiers.length; index++) {
         const tier = tiers[index];
         const sessionId = `search_${index}_${name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'company'}`;
         try {
-            await bootstrapSession(tier, endpoint, sessionId);
-            const response = await fetchHtml(tier, endpoint, sessionId);
+            await bootstrapSession(tier, endpoint, sessionId, deadline);
+            const response = await fetchHtml(tier, endpoint, sessionId, deadline);
             try {
                 const suggestions = JSON.parse(response.body) as Array<Record<string, unknown>>;
                 const company = suggestions.find((item) => item.category === 'company' && Number(item.employerId) > 0);

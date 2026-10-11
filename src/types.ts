@@ -144,6 +144,7 @@ export interface CompanyReport {
     accessTier: string | null;
     source: 'bff' | 'html' | null;
     complete: boolean;
+    historyCommitted?: boolean;
     collectedReviews: number;
     emittedReviews: number;
     newReviews: number;

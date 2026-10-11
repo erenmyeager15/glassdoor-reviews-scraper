@@ -21,13 +21,13 @@ export function normalizeCompanyUrl(value: string): string {
     try {
         url = new URL(value);
     } catch {
-        throw new Error(`Invalid Glassdoor company URL: ${value}`);
+        throw new Error('Invalid Glassdoor company URL. Use a complete public company reviews URL.');
     }
-    if (url.protocol !== 'https:' || !GLASSDOOR_HOSTS.has(url.hostname.toLowerCase())) {
-        throw new Error('Company URLs must use HTTPS on a supported Glassdoor domain.');
+    if (url.protocol !== 'https:' || !GLASSDOOR_HOSTS.has(url.hostname.toLowerCase()) || url.username || url.password || url.port) {
+        throw new Error('Company URLs must use HTTPS on a supported Glassdoor domain without credentials or a custom port.');
     }
     if (!/\/Reviews\/.+-Reviews-E\d+(?:_P\d+)?\.htm$/i.test(url.pathname)) {
-        throw new Error(`Use a Glassdoor company reviews-page URL, not: ${value}`);
+        throw new Error('Use a Glassdoor company reviews-page URL containing its employer ID.');
     }
     url.hash = '';
     url.search = '';

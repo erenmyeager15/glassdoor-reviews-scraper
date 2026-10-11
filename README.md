@@ -6,10 +6,10 @@ No Glassdoor login, cookies, or API key is required.
 
 ## What makes this Actor useful
 
-- **Complete review data:** overall and six category ratings, headline, pros, cons, advice, recommendation/CEO/outlook signals, job title, current/former status, employment type, tenure, location, date, helpful votes, review URL, and available employer replies.
+- **Available public review data:** overall and six category ratings, headline, pros, cons, advice, recommendation/CEO/outlook signals, job title, current/former status, employment type, tenure, location, date, helpful votes, review URL, and available employer replies. Missing source fields remain null rather than being invented.
 - **Company rating snapshot:** overall rating, total review count, recommend-to-friend, CEO approval, business outlook, and available category ratings.
 - **Recurring monitoring:** named watchlists label every row as `baseline`, `new`, or `seen` and preserve per-review first-seen time and observation count.
-- **Only-new mode:** after the first baseline, emit only newly observed reviews so scheduled runs stay focused and inexpensive.
+- **Only-new mode:** after the first baseline, emit only newly observed reviews to avoid duplicate dataset charges. Checking the source still uses resources even when there are no new reviews.
 - **Change signals:** identify company-rating fields that changed since the previous complete observation.
 - **Ready-to-use reports:** dataset JSON, formula-safe CSV, Markdown summary, company snapshots, and an honest run report.
 - **Reliable bounded access:** one sessionless specialist Unblocker request per reviews API page replaces the direct, datacenter, and Residential routes that Glassdoor blocked in live tests.
@@ -115,6 +115,14 @@ Topic labels are transparent keyword signals, not AI sentiment scores. `ratingBa
 The Actor uses lightweight HTTP rather than a full browser. The default memory is 256 MB, the automated-test input requests only three reviews, and work is bounded by company, page, response-size, request-time, and total-run limits.
 
 The automatic strategy makes one sessionless Unblocker request per reviews API page. It does not repeat a premium request through an HTML fallback. If you provide `proxyConfiguration`, that explicit choice replaces the automatic strategy.
+
+Remaining review charges are checked before access setup, company resolution, collection and each dataset push. An exhausted limit is reported as `BUDGET_LIMITED`; it is not called an access block. A smaller affordable sample is explicitly partial and cannot overwrite a complete monitoring baseline. Startup/report storage costs can still apply.
+
+Readable earlier pages are retained if a later page fails, with partial coverage and no monitoring-baseline update. Repeated pages, failed history writes and unresolved company names are not labeled `COMPLETE`. CSV and other report exports must succeed before history advances; an error after a history write reports confirmed commits rather than claiming rollback. `OUTPUT` separates output-billing/report failures from source failures and preserves the count of reviews actually saved.
+
+Each request also respects the remaining total-run time. The run report distinguishes completed companies from unattempted companies. Source access failures remain visible; a total block never becomes a fabricated empty success.
+
+The sessionless Unblocker request window is at most 75 seconds, shortened when the collection deadline is nearer. This allows headroom for slower challenge-solving responses without adding automatic retries, duplicate premium requests or a Residential fallback. Ordinary direct/custom routes retain their existing request limits.
 
 The Unblocker connection accepts the proxy's interception certificate only for that managed route; ordinary direct connections retain normal TLS verification.
 
