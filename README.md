@@ -1,151 +1,125 @@
-# Glassdoor Reviews Scraper - Ratings, Pros & Cons
+# Glassdoor Reviews Scraper & Employer Brand Monitor
 
-Scrape **Glassdoor company reviews** from public company review pages. Anonymous runs collect the public first page; add your own Glassdoor cookies to enable authenticated pagination across deeper review pages. Extract employee ratings, review headlines, pros, cons, job titles, employment status, tenure, location, and dates from any company's Glassdoor page. Export results to JSON, CSV, Excel, or HTML, or pull them through the Apify API.
+Extract public Glassdoor employee reviews and company ratings, then run the same watchlist on a schedule to identify newly observed reviews and employer-brand changes.
 
-Perfect for employer branding, HR benchmarking, competitor research, sentiment analysis, and job-market intelligence.
+No Glassdoor login, cookies, or API key is required.
 
-## Features
+## What makes this Actor useful
 
-- Works anonymously for public page-1 reviews
-- Optional Glassdoor cookies for authenticated pagination
-- Handles Glassdoor's anti-bot protection with a real browser and residential proxy support
-- Multiple companies per run - pass a list of URLs or company names
-- Complete review data - rating, headline, pros, cons, job title, status, tenure, location, date
-- Company insights - overall rating, recommend-to-friend %, CEO approval %
-- Filter by employment status, job title, or location
-- Automatic pagination when authenticated cookies are provided
-- Clean structured output - ready for spreadsheets, BI tools, or NLP pipelines
-
-## What It Extracts
-
-### Company record
-
-Company records are saved to the key-value store as `company-<name>`.
-
-- Company name and Glassdoor URL
-- Overall rating
-- Recommend-to-friend %
-- CEO approval %
-- Total review count when visible
-
-### Review record
-
-Review records are saved to the default dataset.
-
-- Review ID and direct review URL
-- Overall star rating and headline
-- Pros and cons text
-- Job title, employment status, tenure, and location
-- Review date
-
-## Input
-
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `companyUrls` | `string[]` | Glassdoor reviews-page URLs (recommended) | Google example |
-| `companyNames` | `string[]` | Company names to search on Glassdoor | `[]` |
-| `maxReviewsPerCompany` | `integer` | Max reviews per company (`0` = all available to the session) | `10` |
-| `glassdoorCookies` | `string` | Optional secret Cookie header or JSON cookie array for authenticated pagination | empty |
-| `filterByEmploymentStatus` | `string` | `current`, `former`, or all | all |
-| `filterByJobTitle` | `string` | Keep reviews whose job title contains this text | all |
-| `filterByLocation` | `string` | Keep reviews whose location contains this text | all |
-| `proxyConfiguration` | `object` | Proxy settings (residential strongly recommended) | Apify Residential |
-
-### Example input
-
-```json
-{
-    "companyUrls": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
-    "maxReviewsPerCompany": 10,
-    "filterByEmploymentStatus": "current",
-    "proxyConfiguration": { "useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"] }
-}
-```
-
-### Authenticated Pagination
-
-To scrape page 2 and beyond, paste your own logged-in Glassdoor cookies into `glassdoorCookies`.
-
-The actor accepts either:
-
-- Browser Cookie header format: `name=value; name2=value2`
-- JSON cookie array exported from your browser
-
-## Sample Output
-
-### Review
-
-```json
-{
-    "companyName": "Google",
-    "companyUrl": "https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm",
-    "reviewId": "104309026",
-    "reviewUrl": "https://www.glassdoor.com/Reviews/Employee-Review-Google-E9079-RVW104309026.htm",
-    "headline": "Good for tech research, but slow growth response",
-    "overallRating": 4,
-    "jobTitle": "Hardware engineer",
-    "employmentStatus": "Current employee",
-    "employmentTenure": "more than 1 year",
-    "location": "Fremont, CA",
-    "reviewDate": "8 Jun 2026",
-    "pros": "Good for tech research and innovation goals.",
-    "cons": "Bad for the quick response and growth.",
-    "scrapedAt": "2026-06-10T18:38:03.132Z"
-}
-```
-
-### Company
-
-```json
-{
-    "companyName": "Google",
-    "glassdoorUrl": "https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm",
-    "overallRating": 4.4,
-    "recommendToFriendPct": 87,
-    "ceoApprovalPct": 82,
-    "totalReviewsCount": 10000,
-    "scrapedAt": "2026-06-10T18:38:03.106Z"
-}
-```
+- **Complete review data:** overall and six category ratings, headline, pros, cons, advice, recommendation/CEO/outlook signals, job title, current/former status, employment type, tenure, location, date, helpful votes, review URL, and available employer replies.
+- **Company rating snapshot:** overall rating, total review count, recommend-to-friend, CEO approval, business outlook, and available category ratings.
+- **Recurring monitoring:** named watchlists label every row as `baseline`, `new`, or `seen` and preserve per-review first-seen time and observation count.
+- **Only-new mode:** after the first baseline, emit only newly observed reviews so scheduled runs stay focused and inexpensive.
+- **Change signals:** identify company-rating fields that changed since the previous complete observation.
+- **Ready-to-use reports:** dataset JSON, formula-safe CSV, Markdown summary, company snapshots, and an honest run report.
+- **Reliable bounded access:** one sessionless specialist Unblocker request per reviews API page replaces the direct, datacenter, and Residential routes that Glassdoor blocked in live tests.
+- **Safe partial results:** blocked or incomplete pages are reported as partial and are never treated as deleted reviews.
 
 ## Pricing
 
-This Actor uses pay-per-result pricing:
+The Actor charges **$4 per 1,000 successfully saved reviews** (`$0.004` per review). Failed companies and unsaved reviews are not charged. Platform usage is included in the event price shown by Apify.
 
-| Event | Price |
-|-------|-------|
-| Per review scraped | **$0.004** ($4 / 1,000 reviews) |
+## Quick start
 
-You are only charged for reviews actually extracted - never for blocked or empty runs. Apify platform usage and proxy traffic are billed separately by Apify.
+Use a Glassdoor company Reviews URL:
 
-## Use Cases
+```json
+{
+  "companyUrls": [
+    "https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"
+  ],
+  "maxReviewsPerCompany": 3,
+  "watchlistName": "us-tech-employers",
+  "onlyNewReviews": false
+}
+```
 
-- Employer branding - monitor how employees rate your company
-- HR benchmarking - compare ratings, pros, and cons against competitors
-- Sentiment analysis and NLP - feed clean review text into ML pipelines
-- Job-market intelligence - understand culture, management, and work-life balance trends
-- Competitor research - track rival employers' reputation over time
+For recurring monitoring:
 
-## How to Scrape Glassdoor Reviews (Step by Step)
+1. Run once with `onlyNewReviews: false` to create a baseline.
+2. Save the input as an Apify Task.
+3. Schedule the Task with the same `watchlistName`.
+4. Turn on `onlyNewReviews` when you want later runs to emit only unseen reviews.
 
-1. Click **Try for free** / **Run**.
-2. Paste one or more Glassdoor reviews-page URLs into `companyUrls` (e.g. `https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm`), or add `companyNames` to search.
-3. Set `maxReviewsPerCompany` (start small to test).
-4. Optionally paste authenticated `glassdoorCookies` for deeper pagination, and set `filterByEmploymentStatus`, `filterByJobTitle`, or `filterByLocation`.
-5. Run the Actor, then export results as JSON, CSV, Excel, or HTML, or pull them via the Apify API.
+## Input
 
-## Tips
+| Field | Purpose | Default |
+|---|---|---:|
+| `companyUrls` | Up to 20 Glassdoor company Reviews URLs | Google Reviews URL |
+| `companyNames` | Optional company names to resolve | none |
+| `maxReviewsPerCompany` | Maximum matching reviews saved per company | 3 |
+| `filterByEmploymentStatus` | All, current, or former employees | all |
+| `filterByJobTitle` | Case-insensitive job-title filter | none |
+| `filterByLocation` | Case-insensitive location filter | none |
+| `watchlistName` | Private key separating recurring monitors | `default` |
+| `onlyNewReviews` | Emit only reviews unseen in earlier matching runs | `false` |
+| `useUnblocker` | Use the recommended bounded anti-blocking route | `true` |
+| `maxRunMinutes` | Stop new collection work near this limit | 5 |
+| `proxyConfiguration` | Optional custom proxy override | automatic strategy |
 
-- Glassdoor uses Cloudflare protection - keep residential proxies enabled for reliable results.
-- Direct Glassdoor reviews-page URLs are more reliable than company-name search.
-- Without `glassdoorCookies`, Glassdoor usually exposes only page 1 of reviews. Add authenticated cookies for deeper pagination.
+Direct Glassdoor Reviews URLs are recommended when exact company matching matters.
 
-## Responsible Use
+## Review output
 
-This Actor is intended for lawful collection of publicly available information only. Users are responsible for ensuring their use complies with the source website's terms, robots.txt, applicable privacy laws, including India's DPDP Act, and all local regulations.
+Each dataset row can include:
 
-Do not use this Actor to collect, store, sell, or misuse personal data without a lawful basis. The Actor author is not responsible for misuse by end users.
+```json
+{
+  "companyName": "Example Co",
+  "overallRating": 4,
+  "ratingBand": "positive",
+  "ratingWorkLifeBalance": 4,
+  "ratingCultureAndValues": 5,
+  "ratingDiversityAndInclusion": 4,
+  "ratingSeniorLeadership": 3,
+  "ratingCareerOpportunities": 4,
+  "ratingCompensationAndBenefits": 5,
+  "recommendToFriend": "POSITIVE",
+  "ceoApproval": "APPROVE",
+  "businessOutlook": "POSITIVE",
+  "headline": "Supportive remote team",
+  "pros": "Great culture and benefits.",
+  "cons": "Some workload pressure.",
+  "jobTitle": "Software Engineer",
+  "employmentStatus": "Current Employee",
+  "employmentType": "REGULAR",
+  "employmentTenure": "4 years",
+  "employmentTenureYears": 4,
+  "location": "New York, NY",
+  "reviewDate": "2026-10-10",
+  "helpfulCount": 17,
+  "topics": ["compensation", "culture", "remote-work", "workload"],
+  "dataQualityWarnings": [],
+  "monitoringStatus": "new",
+  "firstObservedAt": "2026-10-11T00:00:00.000Z",
+  "observationCount": 1,
+  "companyChangeDetected": true,
+  "companyChangedFields": ["overallRating", "totalReviewsCount"],
+  "sourceQuality": "complete"
+}
+```
 
-## License
+Topic labels are transparent keyword signals, not AI sentiment scores. `ratingBand` is deterministic: 4–5 positive, 3–3.9 mixed, below 3 negative.
 
-Apache-2.0
+## Saved outputs
+
+- **Default dataset:** review rows.
+- **`COMPANIES`:** company rating snapshots.
+- **`MONITORING-REPORT`:** per-company coverage and change evidence.
+- **`MONITORING-REPORT.md`:** readable monitoring summary.
+- **`MONITORING-REPORT.csv`:** spreadsheet-ready review export with formula-injection protection.
+- **`OUTPUT`:** run status, completed and failed company counts, budget status, and concise failure reasons.
+
+## Reliability and cost controls
+
+The Actor uses lightweight HTTP rather than a full browser. The default memory is 256 MB, the automated-test input requests only three reviews, and work is bounded by company, page, response-size, request-time, and total-run limits.
+
+The automatic strategy makes one sessionless Unblocker request per reviews API page. It does not repeat a premium request through an HTML fallback. If you provide `proxyConfiguration`, that explicit choice replaces the automatic strategy.
+
+The Unblocker connection accepts the proxy's interception certificate only for that managed route; ordinary direct connections retain normal TLS verification.
+
+## Limits
+
+Glassdoor can change its public pages or block access. A run can therefore return partial results or fail for a company. The Actor reports that condition instead of fabricating data or silently claiming completion. Filters may require reading additional public pages before enough matching reviews are found.
+
+This Actor reads public information only. Use the data lawfully, respect applicable privacy and employment laws, and do not use it to make automated decisions about individual employees or job applicants.

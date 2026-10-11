@@ -1,74 +1,42 @@
 {
-    "actorSpecification": 1,
-    "name": "glassdoor-reviews-scraper",
-    "title": "Glassdoor Reviews Scraper - Under Maintenance",
-    "description": "Temporarily under maintenance. Runs exit without scraping, saving records, or charging review-scraped events.",
-    "version": "1.0",
-    "categories": ["BUSINESS", "JOBS"],
-    "dockerfile": "Dockerfile",
-    "input": "../INPUT_SCHEMA.json",
-    "storages": {
-        "dataset": {
-            "actorSpecification": 1,
-            "views": {
-                "reviews": {
-                    "title": "Reviews",
-                    "transformation": {
-                        "fields": [
-                            "reviewId",
-                            "companyName",
-                            "overallRating",
-                            "headline",
-                            "pros",
-                            "cons",
-                            "jobTitle",
-                            "employmentStatus",
-                            "employmentTenure",
-                            "location",
-                            "reviewDate",
-                            "reviewUrl",
-                            "scrapedAt"
-                        ]
-                    },
-                    "display": {
-                        "component": "table",
-                        "properties": {
-                            "reviewId": { "label": "Review ID", "format": "text" },
-                            "companyName": { "label": "Company", "format": "text" },
-                            "overallRating": { "label": "Rating", "format": "number" },
-                            "headline": { "label": "Headline", "format": "text" },
-                            "pros": { "label": "Pros", "format": "text" },
-                            "cons": { "label": "Cons", "format": "text" },
-                            "jobTitle": { "label": "Job Title", "format": "text" },
-                            "employmentStatus": { "label": "Status", "format": "text" },
-                            "employmentTenure": { "label": "Tenure", "format": "text" },
-                            "location": { "label": "Location", "format": "text" },
-                            "reviewDate": { "label": "Date", "format": "text" },
-                            "reviewUrl": { "label": "URL", "format": "link" },
-                            "scrapedAt": { "label": "Scraped At", "format": "text" }
-                        }
-                    }
-                }
-            }
+  "actorSpecification": 1,
+  "name": "glassdoor-reviews-scraper",
+  "title": "Glassdoor Reviews Scraper & Employer Brand Monitor",
+  "description": "Public employee reviews, company ratings, employer replies, new-review alerts, rating changes, and CSV/Markdown reports. No login or cookies required.",
+  "version": "1.2",
+  "buildTag": "latest",
+  "categories": ["BUSINESS", "JOBS", "MARKETING"],
+  "categoriesVersion": "1.0.0",
+  "dockerfile": "Dockerfile",
+  "input": "../INPUT_SCHEMA.json",
+  "readme": "../README.md",
+  "output": "./output_schema.json",
+  "exampleRunInput": {
+    "body": "{\"companyUrls\":[\"https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm\"],\"maxReviewsPerCompany\":3,\"watchlistName\":\"default\",\"onlyNewReviews\":false,\"useUnblocker\":true,\"maxRunMinutes\":5}",
+    "contentType": "application/json; charset=utf-8"
+  },
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "pricingInfo": {
+    "pricingModel": "PAY_PER_EVENT",
+    "pricingPerEvent": {
+      "actorChargeEvents": {
+        "review-scraped": {
+          "eventTitle": "Review scraped",
+          "eventDescription": "Charged only for each Glassdoor review successfully extracted and saved to the dataset.",
+          "eventPriceUsd": 0.004,
+          "isPrimaryEvent": true,
+          "isOneTimeEvent": false
         }
-    },
-    "pricingInfo": {
-        "pricingModel": "PAY_PER_EVENT",
-        "pricingPerEvent": {
-            "actorChargeEvents": {
-                "review-scraped": {
-                    "eventTitle": "Review Scraped",
-                    "eventDescription": "Charged for each Glassdoor review successfully extracted and saved to the dataset.",
-                    "eventPriceUsd": 0.004
-                }
-            }
-        }
-    },
-    "defaultRunOptions": {
-        "build": "latest",
-        "memoryMbytes": 4096,
-        "timeoutSecs": 3600
-    },
-    "minMemoryMbytes": 2048,
-    "maxMemoryMbytes": 8192
+      }
+    }
+  },
+  "defaultRunOptions": {
+    "build": "latest",
+    "memoryMbytes": 256,
+    "timeoutSecs": 600
+  },
+  "minMemoryMbytes": 256,
+  "maxMemoryMbytes": 512
 }

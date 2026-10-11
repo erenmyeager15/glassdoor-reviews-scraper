@@ -1,72 +1,97 @@
 {
-    "title": "Glassdoor Reviews Scraper",
-    "description": "Provide Glassdoor company reviews-page URLs (recommended) or company names. Anonymous runs scrape public page-1 reviews; add Glassdoor cookies for authenticated pagination.",
-    "type": "object",
-    "schemaVersion": 1,
-    "properties": {
-        "companyUrls": {
-            "title": "Company Glassdoor URLs",
-            "description": "Glassdoor company reviews page URLs, e.g. https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm",
-            "type": "array",
-            "editor": "stringList",
-            "prefill": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
-            "default": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"]
-        },
-        "companyNames": {
-            "title": "Company Names",
-            "description": "Company names to search on Glassdoor. Direct URLs are more reliable than names.",
-            "type": "array",
-            "editor": "stringList",
-            "default": []
-        },
-        "maxReviewsPerCompany": {
-            "title": "Max Reviews Per Company",
-            "description": "Maximum reviews to scrape per company. Anonymous runs are limited to public page-1 reviews; authenticated cookie runs can paginate deeper.",
-            "type": "integer",
-            "editor": "number",
-            "default": 10,
-            "minimum": 0,
-            "maximum": 10000
-        },
-        "glassdoorCookies": {
-            "title": "Glassdoor Cookies",
-            "description": "Optional authenticated Glassdoor cookies. Paste either a browser Cookie header (name=value; name2=value2) or a JSON cookie array. Required for page 2+ pagination.",
-            "type": "string",
-            "editor": "textarea",
-            "isSecret": true
-        },
-        "filterByEmploymentStatus": {
-            "title": "Filter by Employment Status",
-            "description": "Only keep reviews from employees with this status.",
-            "type": "string",
-            "editor": "select",
-            "default": "",
-            "enum": ["", "current", "former"],
-            "enumTitles": ["All", "Current Employees", "Former Employees"]
-        },
-        "filterByJobTitle": {
-            "title": "Filter by Job Title",
-            "description": "Only keep reviews whose job title contains this text (case-insensitive). Leave empty for all.",
-            "type": "string",
-            "editor": "textfield",
-            "default": ""
-        },
-        "filterByLocation": {
-            "title": "Filter by Location",
-            "description": "Only keep reviews whose location contains this text (case-insensitive). Leave empty for all.",
-            "type": "string",
-            "editor": "textfield",
-            "default": ""
-        },
-        "proxyConfiguration": {
-            "title": "Proxy Configuration",
-            "description": "Glassdoor uses Cloudflare protection, so residential proxies are strongly recommended.",
-            "type": "object",
-            "editor": "proxy",
-            "default": {
-                "useApifyProxy": true,
-                "apifyProxyGroups": ["RESIDENTIAL"]
-            }
-        }
+  "title": "Glassdoor Reviews Scraper & Employer Brand Monitor",
+  "description": "Extract public Glassdoor reviews and employer ratings, then monitor new reviews and rating changes across scheduled runs. No login or cookies required.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "companyUrls": {
+      "title": "Glassdoor company review URLs",
+      "description": "Up to 20 Glassdoor Reviews URLs. Direct URLs are the fastest and most reliable input.",
+      "type": "array",
+      "editor": "stringList",
+      "prefill": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
+      "default": ["https://www.glassdoor.com/Reviews/Google-Reviews-E9079.htm"],
+      "maxItems": 20,
+      "sectionCaption": "Companies"
+    },
+    "companyNames": {
+      "title": "Company names",
+      "description": "Optional company names to resolve on Glassdoor. Use direct review URLs when exact matching matters.",
+      "type": "array",
+      "editor": "stringList",
+      "default": [],
+      "maxItems": 20
+    },
+    "maxReviewsPerCompany": {
+      "title": "Reviews per company",
+      "description": "Maximum matching reviews saved for each company. The quality-test default is deliberately small and finishes within five minutes.",
+      "type": "integer",
+      "editor": "number",
+      "default": 3,
+      "minimum": 1,
+      "maximum": 500,
+      "sectionCaption": "Reviews and filters"
+    },
+    "filterByEmploymentStatus": {
+      "title": "Employment status",
+      "description": "Return all reviews or only current/former employees.",
+      "type": "string",
+      "editor": "select",
+      "default": "",
+      "enum": ["", "current", "former"],
+      "enumTitles": ["All employees", "Current employees", "Former employees"]
+    },
+    "filterByJobTitle": {
+      "title": "Job title contains",
+      "description": "Case-insensitive job-title filter, such as engineer or sales.",
+      "type": "string",
+      "editor": "textfield",
+      "default": ""
+    },
+    "filterByLocation": {
+      "title": "Location contains",
+      "description": "Case-insensitive location filter, such as New York or Texas.",
+      "type": "string",
+      "editor": "textfield",
+      "default": ""
+    },
+    "watchlistName": {
+      "title": "Watchlist name",
+      "description": "Stable private name for recurring comparisons, for example US SaaS competitors. Reuse it in scheduled runs.",
+      "type": "string",
+      "editor": "textfield",
+      "default": "default",
+      "sectionCaption": "Employer-brand monitoring"
+    },
+    "onlyNewReviews": {
+      "title": "Save only newly observed reviews",
+      "description": "After the first baseline, save and charge only reviews not seen in earlier runs of this watchlist.",
+      "type": "boolean",
+      "editor": "checkbox",
+      "default": false
+    },
+    "useUnblocker": {
+      "title": "Use specialist anti-blocking access",
+      "description": "Recommended. Make one sessionless Apify Unblocker request per review page. This replaces the blocked direct, datacenter, and Residential routes and prevents repeated premium requests.",
+      "type": "boolean",
+      "editor": "checkbox",
+      "default": true,
+      "sectionCaption": "Reliability and cost controls"
+    },
+    "maxRunMinutes": {
+      "title": "Run-time limit in minutes",
+      "description": "Stops additional collection work near this limit and saves an honest partial report.",
+      "type": "integer",
+      "editor": "number",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 15
+    },
+    "proxyConfiguration": {
+      "title": "Custom proxy configuration",
+      "description": "Optional advanced override. Leave empty for the bounded specialist Unblocker strategy.",
+      "type": "object",
+      "editor": "proxy"
     }
+  }
 }

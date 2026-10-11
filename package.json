@@ -1,7 +1,7 @@
 {
   "name": "glassdoor-scraper",
-  "version": "1.0.0",
-  "description": "Apify Actor for scraping Glassdoor company reviews and employer data",
+  "version": "1.2.0",
+  "description": "Glassdoor reviews scraper and employer-brand change monitor",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -9,18 +9,23 @@
   "scripts": {
     "start": "node dist/main.js",
     "build": "tsc",
-    "test": "echo \"No tests yet\"",
-    "lint": "tsc --noEmit"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "lint": "tsc --noEmit",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
-    "apify": "^3.1.0",
-    "crawlee": "^3.11.0",
-    "playwright": "^1.48.0"
+    "apify": "^3.7.2",
+    "cheerio": "1.0.0-rc.12",
+    "impit": "^0.14.5",
+    "tough-cookie": "^6.0.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0"
   },
-  "author": "glassdoor-scraper-developer",
+  "overrides": {
+    "basic-ftp": "6.2.3"
+  },
+  "author": "Md Jakaria Mirza",
   "license": "Apache-2.0",
   "readmeFilename": "README.md"
 }

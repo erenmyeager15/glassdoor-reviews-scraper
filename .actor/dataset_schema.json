@@ -1,0 +1,87 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "type": "object",
+    "properties": {
+      "companyName": { "type": "string", "title": "Company" },
+      "companyUrl": { "type": "string", "title": "Glassdoor company URL" },
+      "reviewId": { "type": "string", "title": "Review ID" },
+      "reviewUrl": { "type": ["string", "null"], "title": "Review URL" },
+      "headline": { "type": ["string", "null"], "title": "Headline" },
+      "overallRating": { "type": ["number", "null"], "title": "Overall rating" },
+      "ratingBand": { "type": "string", "title": "Rating band", "enum": ["positive", "mixed", "negative", "unknown"] },
+      "ratingWorkLifeBalance": { "type": ["number", "null"], "title": "Work-life balance" },
+      "ratingCultureAndValues": { "type": ["number", "null"], "title": "Culture and values" },
+      "ratingDiversityAndInclusion": { "type": ["number", "null"], "title": "Diversity and inclusion" },
+      "ratingSeniorLeadership": { "type": ["number", "null"], "title": "Senior leadership" },
+      "ratingCareerOpportunities": { "type": ["number", "null"], "title": "Career opportunities" },
+      "ratingCompensationAndBenefits": { "type": ["number", "null"], "title": "Compensation and benefits" },
+      "recommendToFriend": { "type": ["string", "null"], "title": "Recommend to friend" },
+      "ceoApproval": { "type": ["string", "null"], "title": "CEO approval" },
+      "businessOutlook": { "type": ["string", "null"], "title": "Business outlook" },
+      "jobTitle": { "type": ["string", "null"], "title": "Job title" },
+      "employmentStatus": { "type": ["string", "null"], "title": "Employment status" },
+      "employmentType": { "type": ["string", "null"], "title": "Employment type" },
+      "isCurrentEmployee": { "type": ["boolean", "null"], "title": "Current employee" },
+      "employmentTenure": { "type": ["string", "null"], "title": "Employment tenure" },
+      "employmentTenureYears": { "type": ["integer", "null"], "title": "Employment tenure (years)" },
+      "location": { "type": ["string", "null"], "title": "Location" },
+      "reviewDate": { "type": ["string", "null"], "title": "Review date" },
+      "pros": { "type": ["string", "null"], "title": "Pros" },
+      "cons": { "type": ["string", "null"], "title": "Cons" },
+      "adviceToManagement": { "type": ["string", "null"], "title": "Advice to management" },
+      "employerResponse": { "type": ["string", "null"], "title": "Employer response" },
+      "employerResponseDate": { "type": ["string", "null"], "title": "Employer response date" },
+      "helpfulCount": { "type": ["integer", "null"], "title": "Helpful votes" },
+      "notHelpfulCount": { "type": ["integer", "null"], "title": "Not helpful votes" },
+      "featured": { "type": ["boolean", "null"], "title": "Featured review" },
+      "topics": { "type": "array", "title": "Topics", "items": { "type": "string" } },
+      "dataQualityWarnings": { "type": "array", "title": "Data quality warnings", "items": { "type": "string" } },
+      "monitoringStatus": { "type": "string", "title": "Monitoring status", "enum": ["baseline", "new", "seen"] },
+      "firstObservedAt": { "type": "string", "title": "First observed" },
+      "observationCount": { "type": "integer", "title": "Observations" },
+      "companyChangeDetected": { "type": "boolean", "title": "Company rating changed" },
+      "companyChangedFields": { "type": "array", "title": "Changed company fields", "items": { "type": "string" } },
+      "sourceQuality": { "type": "string", "title": "Source quality", "enum": ["complete", "partial"] },
+      "scrapedAt": { "type": "string", "title": "Observed at" }
+    }
+  },
+  "views": {
+    "reviews": {
+      "title": "Reviews and employer-brand changes",
+      "transformation": {
+        "fields": [
+          "companyName", "overallRating", "ratingBand", "headline", "pros", "cons", "jobTitle",
+          "employmentStatus", "employmentType", "isCurrentEmployee", "employmentTenure", "employmentTenureYears", "location", "reviewDate",
+          "ratingWorkLifeBalance", "ratingCultureAndValues", "ratingDiversityAndInclusion",
+          "ratingSeniorLeadership", "ratingCareerOpportunities", "ratingCompensationAndBenefits",
+          "recommendToFriend", "ceoApproval", "businessOutlook", "helpfulCount", "employerResponse", "topics", "dataQualityWarnings",
+          "monitoringStatus", "firstObservedAt", "observationCount", "companyChangeDetected",
+          "companyChangedFields", "sourceQuality", "reviewUrl", "scrapedAt"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "companyName": { "label": "Company", "format": "text" },
+          "overallRating": { "label": "Rating", "format": "number" },
+          "ratingBand": { "label": "Rating band", "format": "text" },
+          "ratingWorkLifeBalance": { "label": "Work-life", "format": "number" },
+          "ratingCultureAndValues": { "label": "Culture", "format": "number" },
+          "headline": { "label": "Headline", "format": "text" },
+          "jobTitle": { "label": "Job title", "format": "text" },
+          "employmentStatus": { "label": "Employee", "format": "text" },
+          "employmentType": { "label": "Employment type", "format": "text" },
+          "location": { "label": "Location", "format": "text" },
+          "reviewDate": { "label": "Review date", "format": "text" },
+          "topics": { "label": "Topics", "format": "array" },
+          "dataQualityWarnings": { "label": "Quality warnings", "format": "array" },
+          "monitoringStatus": { "label": "Watchlist status", "format": "text" },
+          "companyChangeDetected": { "label": "Company changed", "format": "boolean" },
+          "reviewUrl": { "label": "Review", "format": "link" },
+          "scrapedAt": { "label": "Observed at", "format": "date" }
+        }
+      }
+    }
+  }
+}

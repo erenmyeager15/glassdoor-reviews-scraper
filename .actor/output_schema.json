@@ -1,0 +1,44 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Glassdoor Reviews and Employer Brand Monitoring Output",
+  "description": "Review records, company ratings, watchlist changes, and spreadsheet-ready reports.",
+  "type": "object",
+  "properties": {
+    "reviews": {
+      "type": "string",
+      "title": "Review records",
+      "description": "Default dataset with employee reviews and monitoring fields.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    },
+    "companies": {
+      "type": "string",
+      "title": "Company rating snapshots",
+      "description": "Company ratings and category-level employer-brand metrics.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/COMPANIES"
+    },
+    "monitoringReport": {
+      "type": "string",
+      "title": "Monitoring report (JSON)",
+      "description": "Per-company access evidence, new-review counts, changes, and completion status.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/MONITORING-REPORT"
+    },
+    "monitoringMarkdown": {
+      "type": "string",
+      "title": "Monitoring report (Markdown)",
+      "description": "Readable summary for recurring review checks.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/MONITORING-REPORT.md"
+    },
+    "monitoringCsv": {
+      "type": "string",
+      "title": "Review report (CSV)",
+      "description": "Spreadsheet-ready export with formula-injection protection.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/MONITORING-REPORT.csv"
+    },
+    "runSummary": {
+      "type": "string",
+      "title": "Run summary and failures",
+      "description": "Completed/failed company counts, budget status, and honest partial-run evidence.",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT"
+    }
+  }
+}
