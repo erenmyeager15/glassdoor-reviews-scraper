@@ -1,6 +1,6 @@
 # Glassdoor Reviews Scraper & Employer Brand Monitor
 
-Extract public Glassdoor employee reviews and company ratings, then run the same watchlist on a schedule to identify newly observed reviews and employer-brand changes.
+Turn public Glassdoor employee reviews into employer-brand and employee-experience research for HR, recruiting and people-analytics teams. Export available ratings, pros, cons and employer replies, then reuse a named watchlist to identify newly observed reviews and company-rating changes.
 
 No Glassdoor login, cookies, or API key is required.
 
@@ -15,9 +15,18 @@ No Glassdoor login, cookies, or API key is required.
 - **Reliable bounded access:** one sessionless specialist Unblocker request per reviews API page replaces the direct, datacenter, and Residential routes that Glassdoor blocked in live tests.
 - **Safe partial results:** blocked or incomplete pages are reported as partial and are never treated as deleted reviews.
 
-## Pricing
+## Pricing: Saved Reviews + Actor Start
 
-The Actor charges **$4 per 1,000 successfully saved reviews** (`$0.004` per review). Failed companies and unsaved reviews are not charged. Platform usage is included in the event price shown by Apify.
+The Actor uses Pay Per Event pricing:
+
+| Event | Price |
+| --- | ---: |
+| `review-scraped` | `$0.004` per successfully saved review, or `$4.00` per 1,000 |
+| `apify-actor-start` | `$0.00005` per GB when the Actor starts, minimum one event |
+
+Failed company requests and unsaved reviews do not trigger `review-scraped`. Reviews already saved before a partial failure retain their normal result charges. The Actor Start fee can still apply to empty or failed runs: Apify counts one start event per GB of memory, with at least one event. At the unchanged 256 MB default, that is `$0.00005` for the start event.
+
+Platform usage is included under the current Store pricing. The monitoring reports have no separate report event. Check the [live Pricing tab](https://apify.com/fascinating_lentil/glassdoor-reviews-scraper/pricing) for current event prices, discounts and platform-usage terms before running. A saved-review subtotal is not the entire event bill: add the start fee.
 
 ## Quick start
 

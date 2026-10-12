@@ -2,7 +2,7 @@
   "actorSpecification": 1,
   "name": "glassdoor-reviews-scraper",
   "title": "Glassdoor Reviews Scraper & Employer Brand Monitor",
-  "description": "Public employee reviews, company ratings, employer replies, new-review alerts, rating changes, and CSV/Markdown reports. No login or cookies required.",
+  "description": "Collect public Glassdoor employee reviews, ratings and employer replies for employer-brand research. Track new reviews and rating changes with named watchlists and CSV/Markdown reports. $4/1,000 saved reviews plus the start event. No login.",
   "version": "1.2",
   "buildTag": "latest",
   "categories": ["BUSINESS", "JOBS", "MARKETING"],
