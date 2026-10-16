@@ -1,6 +1,7 @@
 import type { ActorInput, AccessEvidence, CompanyReport, CompanySummary, CompanyWatchState, NormalizedInput, ParsedReviewPage } from './types.js';
 import { normalizeCompanyUrl, normalizeInput } from './input.js';
 import type { AccessTier, fetchBff, fetchHtml, resolveCompanyName } from './access.js';
+import { isRecoverableGatewayError } from './access.js';
 import {
     applyReviewFilters,
     employerIdFromUrl,
@@ -141,10 +142,11 @@ async function collectHtml(
     deadline: number,
     sessionId: string,
     runtime: CollectorRuntime,
+    requestLimit?: number,
 ): Promise<CollectionResult> {
     const pages: ParsedReviewPage[] = [];
     const rawIds = new Set<string>();
-    const maxPages = Math.min(100, Math.max(2, Math.ceil(input.maxReviewsPerCompany / 3) + 5));
+    const maxPages = Math.min(requestLimit ?? 100, Math.max(2, Math.ceil(input.maxReviewsPerCompany / 3) + 5));
     let complete = false;
     let warning: string | undefined;
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
@@ -156,6 +158,10 @@ async function collectHtml(
         let page: ParsedReviewPage;
         try {
             const response = await runtime.fetchHtml(tier, url, sessionId, deadline);
+            const returned = normalizeCompanyUrl(response.finalUrl);
+            if (employerIdFromUrl(returned) !== employerIdFromUrl(companyUrl)) {
+                throw new Error('Glassdoor redirected to a different employer; no review from that response was saved.');
+            }
             if (!hasUsableReviewPage(response.body)) throw new Error('Glassdoor returned a page without review evidence.');
             page = parseHtmlReviewPage(response.body, url);
         } catch (error) {
@@ -194,6 +200,7 @@ async function collectCompany(
     input: NormalizedInput,
     deadline: number,
     runtime: CollectorRuntime,
+    recoveryBudget: { remaining: number },
 ): Promise<CollectionResult> {
     const companyKey = (employerIdFromUrl(companyUrl) ?? companyUrl.length).toString(36);
     const errors: string[] = [];
@@ -209,6 +216,26 @@ async function collectCompany(
                     : await collectBff(tier, companyUrl, input, deadline, sessionId, runtime);
             } catch (error) {
                 errors.push(`${tier.label} ${method === 'html' ? 'HTML' : 'reviews API'}: ${safeFailureReason(error)}`);
+                if (method === 'bff' && tier.gatewayHtmlRecovery && !tier.htmlFallback
+                    && isRecoverableGatewayError(error) && recoveryBudget.remaining > 0
+                    && runtime.now() + 1_000 < deadline && remainingReviews(runtime) > 0) {
+                    // One public HTML page, once per run, on the same managed route.
+                    // Never a retry of the failed POST, IP/provider switch or blocked-access fallback.
+                    recoveryBudget.remaining--;
+                    try {
+                        const recovered = await collectHtml(tier, companyUrl, input, deadline, sessionId, runtime, 1);
+                        if (!recovered.page.reviews.length || recovered.page.reviews.some(review =>
+                            !review.headline && !review.pros && !review.cons && review.overallRating === null)) {
+                            throw new Error('Gateway recovery returned no usable review content; empty success is not permitted.');
+                        }
+                        const message = `Reviews API HTTP ${error.statusCode}; recovered using one public HTML request on the same access route.`;
+                        recovered.evidence.gatewayRecovery = { originalStatusCode: error.statusCode, originalSource: 'bff', recoveredSource: 'html', requestLimit: 1 };
+                        recovered.evidence.warning = [message, recovered.evidence.warning].filter(Boolean).join(' ');
+                        return recovered;
+                    } catch (recoveryError) {
+                        errors.push(`Single gateway HTML recovery: ${safeFailureReason(recoveryError)}`);
+                    }
+                }
             }
         }
     }
@@ -225,7 +252,7 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
             reviewsCollected: 0, reviewsEmitted: 0, newReviewsObserved: 0, companyChangesDetected: 0,
             stoppedAtChargeLimit: true, watchStoreId: null, stateWriteFailures: 0, unresolvedNames: [], failures: [],
             companiesKey: 'COMPANIES', monitoringReportKey: 'MONITORING-REPORT', markdownReportKey: 'MONITORING-REPORT.md',
-            csvReportKey: 'MONITORING-REPORT.csv' };
+            csvReportKey: 'MONITORING-REPORT.csv', gatewayRecoveriesAttempted: 0, gatewayRecoveriesSucceeded: 0 };
         await runtime.setValue('COMPANIES', []);
         await runtime.setValue('MONITORING-REPORT', { watchlistName: input.watchlistName, companies: [] });
         await runtime.setValue('MONITORING-REPORT.md', buildMarkdown([], 0, 0), { contentType: 'text/markdown; charset=utf-8' });
@@ -263,6 +290,7 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
     let outputBillingFailure: string | null = null;
     let attemptedCompanies = 0;
     let stoppedAtTimeLimit = false;
+    const recoveryBudget = { remaining: 1 };
 
     for (let index = 0; index < uniqueUrls.length; index++) {
         const companyUrl = uniqueUrls[index];
@@ -276,7 +304,7 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
         attemptedCompanies++;
         try {
             const collectionInput = { ...input, maxReviewsPerCompany: Math.min(input.maxReviewsPerCompany, affordable) };
-            const collection = await collectCompany(companyUrl, tiers, collectionInput, deadline, runtime);
+            const collection = await collectCompany(companyUrl, tiers, collectionInput, deadline, runtime, recoveryBudget);
             if (collectionInput.maxReviewsPerCompany < input.maxReviewsPerCompany
                 && collection.page.reviews.length >= collectionInput.maxReviewsPerCompany) {
                 collection.evidence.complete = false;
@@ -329,6 +357,7 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
                 seenReviews: monitoring.seenReviewCount,
                 companyChangedFields: monitoring.companyChangedFields,
                 ...(collection.evidence.warning ? { warning: collection.evidence.warning } : {}),
+                ...(collection.evidence.gatewayRecovery ? { gatewayRecovery: collection.evidence.gatewayRecovery } : {}),
             };
             reports.push(report);
             if (report.complete && !outputBillingFailure) pendingStates.push({ key, state: monitoring.nextState, report });
@@ -395,6 +424,8 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
         stoppedAtTimeLimit,
         watchStoreId: watchStore.id,
         stateWriteFailures,
+        gatewayRecoveriesAttempted: 1 - recoveryBudget.remaining,
+        gatewayRecoveriesSucceeded: reports.filter(report => report.gatewayRecovery).length,
         unattemptedCompanies: uniqueUrls.length - attemptedCompanies,
         ...(outputBillingFailure ? { failureStage: 'OUTPUT_BILLING', outputBillingFailure } : {}),
         ...(!outputBillingFailure && reportExportFailure ? { failureStage: 'REPORT_EXPORT', reportExportFailure } : {}),

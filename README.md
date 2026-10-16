@@ -12,7 +12,7 @@ No Glassdoor login, cookies, or API key is required.
 - **Only-new mode:** after the first baseline, emit only newly observed reviews to avoid duplicate dataset charges. Checking the source still uses resources even when there are no new reviews.
 - **Change signals:** identify company-rating fields that changed since the previous complete observation.
 - **Ready-to-use reports:** dataset JSON, formula-safe CSV, Markdown summary, company snapshots, and an honest run report.
-- **Reliable bounded access:** one sessionless specialist Unblocker request per reviews API page replaces the direct, datacenter, and Residential routes that Glassdoor blocked in live tests.
+- **Bounded access and gateway recovery:** one sessionless specialist Unblocker request per reviews API page. After an initial API HTTP 502/503/504, allow at most one public HTML recovery request per run on the same configured route. No Residential fallback or retry of denied/rate-limited access.
 - **Safe partial results:** blocked or incomplete pages are reported as partial and are never treated as deleted reviews.
 
 ## Pricing: Saved Reviews + Actor Start
@@ -123,7 +123,9 @@ Topic labels are transparent keyword signals, not AI sentiment scores. `ratingBa
 
 The Actor uses lightweight HTTP rather than a full browser. The default memory is 256 MB, the automated-test input requests only three reviews, and work is bounded by company, page, response-size, request-time, and total-run limits.
 
-The automatic strategy makes one sessionless Unblocker request per reviews API page. It does not repeat a premium request through an HTML fallback. If you provide `proxyConfiguration`, that explicit choice replaces the automatic strategy.
+The automatic strategy normally makes one sessionless Unblocker request per reviews API page. If the first API page fails with a typed HTTP 502/503/504 gateway response, it may fetch one public reviews HTML page on the same route, at most once per run. This is not a repeated API POST, a change of proxy provider, or an unlimited fallback. The extra successful request may incur another Unblocker charge. It is subject to the remaining time and result budget. Source denial/challenge, HTTP 401/403/407/412/429/451, authentication errors, parsing errors and request timeouts do not trigger this recovery. A failed proxy initialization fails closed instead of silently switching to direct access. An explicit `proxyConfiguration` still selects the route; only its Unblocker variant enables this narrow managed gateway recovery.
+
+Recovery accepts only the requested employer's supported reviews URL and usable review content. A client shell, login redirect or empty review card cannot become a successful paid result. One recovery page can yield a smaller sample; partial coverage holds the monitoring baseline. JSON reports disclose `gatewayRecovery`, `gatewayRecoveriesAttempted` and `gatewayRecoveriesSucceeded`, including the original gateway status. HTML fields not present on the source remain null.
 
 Remaining review charges are checked before access setup, company resolution, collection and each dataset push. An exhausted limit is reported as `BUDGET_LIMITED`; it is not called an access block. A smaller affordable sample is explicitly partial and cannot overwrite a complete monitoring baseline. Startup/report storage costs can still apply.
 
@@ -131,7 +133,7 @@ Readable earlier pages are retained if a later page fails, with partial coverage
 
 Each request also respects the remaining total-run time. The run report distinguishes completed companies from unattempted companies. Source access failures remain visible; a total block never becomes a fabricated empty success.
 
-The sessionless Unblocker request window is at most 75 seconds, shortened when the collection deadline is nearer. This allows headroom for slower challenge-solving responses without adding automatic retries, duplicate premium requests or a Residential fallback. Ordinary direct/custom routes retain their existing request limits.
+The sessionless Unblocker request window is at most 75 seconds, shortened when the collection deadline is nearer. A conditional single gateway-recovery page uses that same remaining deadline, without retry loops or a Residential fallback. Ordinary direct/custom routes retain their existing request limits. Total source failure still fails honestly with no fabricated rows; changing an example or marking an empty run successful is not a repair.
 
 The Unblocker connection accepts the proxy's interception certificate only for that managed route; ordinary direct connections retain normal TLS verification.
 

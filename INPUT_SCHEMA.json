@@ -72,7 +72,7 @@
     },
     "useUnblocker": {
       "title": "Use specialist anti-blocking access",
-      "description": "Recommended. Make one sessionless Apify Unblocker request per review page. This replaces the blocked direct, datacenter, and Residential routes and prevents repeated premium requests.",
+      "description": "Recommended sessionless Unblocker route. A first-page API gateway error (502/503/504) permits one public HTML recovery request per run on the same route; no Residential fallback or denied-access retry.",
       "type": "boolean",
       "editor": "checkbox",
       "default": true,

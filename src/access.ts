@@ -16,6 +16,7 @@ export interface AccessTier {
     stickySession: boolean;
     bootstrap: boolean;
     htmlFallback: boolean;
+    gatewayHtmlRecovery?: boolean;
     requestTimeoutMs: number;
     ignoreTlsErrors: boolean;
 }
@@ -38,6 +39,24 @@ const clients = new Map<string, ClientState>();
 // requestLimits still caps it to the remaining collection deadline.
 export const UNBLOCKER_REQUEST_TIMEOUT_MS = 75_000;
 
+// HTTP metadata, not response text, selects the narrowly bounded recovery path.
+export class GlassdoorHttpError extends Error {
+    constructor(
+        readonly statusCode: number,
+        readonly operation: 'bff' | 'html',
+        readonly kind: 'gateway' | 'blocked' | 'http',
+        label: string,
+    ) {
+        super(`Glassdoor ${operation === 'bff' ? 'reviews API' : 'page'} ${kind === 'blocked' ? 'blocked' : 'returned'} HTTP ${statusCode} on ${label}.`);
+        this.name = 'GlassdoorHttpError';
+    }
+}
+
+export function isRecoverableGatewayError(error: unknown): error is GlassdoorHttpError {
+    return error instanceof GlassdoorHttpError && error.operation === 'bff'
+        && error.kind === 'gateway' && [502, 503, 504].includes(error.statusCode);
+}
+
 function proxyLabel(value: ProxyConfigInput): string {
     if (value.proxyUrls?.length) return 'custom proxy';
     if (value.useApifyProxy === false) return 'direct';
@@ -48,7 +67,7 @@ function proxyLabel(value: ProxyConfigInput): string {
 async function createTier(
     label: string,
     options: ReturnType<typeof toProxyOptions>,
-    settings: Pick<AccessTier, 'stickySession' | 'bootstrap' | 'htmlFallback' | 'requestTimeoutMs' | 'ignoreTlsErrors'>,
+    settings: Pick<AccessTier, 'stickySession' | 'bootstrap' | 'htmlFallback' | 'gatewayHtmlRecovery' | 'requestTimeoutMs' | 'ignoreTlsErrors'>,
 ): Promise<AccessTier> {
     if ('useApifyProxy' in options && options.useApifyProxy === false && !('proxyUrls' in options)) {
         return {
@@ -76,6 +95,7 @@ export async function buildAccessTiers(input: NormalizedInput): Promise<AccessTi
                 stickySession: !isUnblocker,
                 bootstrap: !isUnblocker,
                 htmlFallback: !isUnblocker,
+                gatewayHtmlRecovery: isUnblocker,
                 requestTimeoutMs: isUnblocker ? UNBLOCKER_REQUEST_TIMEOUT_MS : 20_000,
                 ignoreTlsErrors: isUnblocker,
             },
@@ -91,11 +111,12 @@ export async function buildAccessTiers(input: NormalizedInput): Promise<AccessTi
                 stickySession: false,
                 bootstrap: false,
                 htmlFallback: false,
+                gatewayHtmlRecovery: true,
                 requestTimeoutMs: UNBLOCKER_REQUEST_TIMEOUT_MS,
                 ignoreTlsErrors: true,
             })];
         } catch {
-            // Cloud runs normally have credentials; diagnostics remain useful without them.
+            throw new Error('Could not initialize the configured Apify Unblocker route. No silent direct or Residential fallback was attempted.');
         }
     }
     return [{
@@ -192,10 +213,10 @@ async function request(tier: AccessTier, url: string, sessionId: string, options
 export async function fetchHtml(tier: AccessTier, url: string, sessionId: string, deadline = Infinity): Promise<AccessResponse> {
     const response = await request(tier, url, sessionId, {}, deadline);
     if (isBlockedGlassdoorPage(response.statusCode, response.body)) {
-        throw new Error(`Glassdoor access blocked on ${tier.label} (HTTP ${response.statusCode}).`);
+        throw new GlassdoorHttpError(response.statusCode, 'html', 'blocked', tier.label);
     }
     if (response.statusCode < 200 || response.statusCode >= 400) {
-        throw new Error(`Glassdoor returned HTTP ${response.statusCode} on ${tier.label}.`);
+        throw new GlassdoorHttpError(response.statusCode, 'html', 'http', tier.label);
     }
     return response;
 }
@@ -231,10 +252,10 @@ export async function fetchBff(tier: AccessTier, companyUrl: string, employerId:
         referer: companyUrl,
     }, deadline);
     if (isBlockedGlassdoorPage(response.statusCode, response.body)) {
-        throw new Error(`Glassdoor reviews API blocked on ${tier.label} (HTTP ${response.statusCode}).`);
+        throw new GlassdoorHttpError(response.statusCode, 'bff', 'blocked', tier.label);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw new Error(`Glassdoor reviews API returned HTTP ${response.statusCode} on ${tier.label}.`);
+        throw new GlassdoorHttpError(response.statusCode, 'bff', [502, 503, 504].includes(response.statusCode) ? 'gateway' : 'http', tier.label);
     }
     let parsed: unknown;
     try {

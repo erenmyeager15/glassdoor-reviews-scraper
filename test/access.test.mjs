@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import http from 'node:http';
 import { Actor } from 'apify';
-import { buildAccessTiers, fetchHtml, requestLimits, UNBLOCKER_REQUEST_TIMEOUT_MS } from '../dist/access.js';
+import { buildAccessTiers, fetchBff, fetchHtml, requestLimits, UNBLOCKER_REQUEST_TIMEOUT_MS, GlassdoorHttpError, isRecoverableGatewayError } from '../dist/access.js';
 import { normalizeInput } from '../dist/input.js';
 
 const companyUrl = 'https://www.glassdoor.com/Reviews/Example-Reviews-E123.htm';
@@ -26,6 +26,7 @@ test('automatic Unblocker has bounded latency headroom and still only one sessio
         assert.equal(tiers[0].stickySession, false);
         assert.equal(tiers[0].bootstrap, false);
         assert.equal(tiers[0].htmlFallback, false);
+        assert.equal(tiers[0].gatewayHtmlRecovery, true);
     });
 });
 
@@ -39,6 +40,7 @@ test('explicit Unblocker gets the same timeout without introducing a fallback or
         assert.equal(tiers[0].bootstrap, false);
         assert.equal(tiers[0].htmlFallback, false);
         assert.equal(tiers[0].stickySession, false);
+        assert.equal(tiers[0].gatewayHtmlRecovery, true);
     });
 });
 
@@ -83,4 +85,33 @@ test('native Impit aborts at a short deadline but accepts a slower response with
         server.closeAllConnections();
         await new Promise(resolve => server.close(resolve));
     }
+});
+
+test('only typed BFF gateway failures qualify; message strings do not select a new request', () => {
+    for (const status of [502, 503, 504]) assert.equal(isRecoverableGatewayError(new GlassdoorHttpError(status, 'bff', 'gateway', 'offline')), true);
+    for (const error of [new Error('HTTP 502'), new GlassdoorHttpError(502, 'bff', 'blocked', 'offline'),
+        new GlassdoorHttpError(502, 'html', 'gateway', 'offline'), new GlassdoorHttpError(500, 'bff', 'http', 'offline')]) {
+        assert.equal(isRecoverableGatewayError(error), false);
+    }
+});
+test('failed automatic proxy initialization fails closed without a silent direct route', async () => {
+    const original = Actor.createProxyConfiguration;
+    Actor.createProxyConfiguration = async () => { throw new Error('password=DO_NOT_LOG_ME'); };
+    try {
+        await assert.rejects(buildAccessTiers(normalizeInput({ companyUrls: [companyUrl] })), error =>
+            /No silent direct or Residential fallback/.test(error.message) && !error.message.includes('DO_NOT_LOG_ME'));
+    } finally { Actor.createProxyConfiguration = original; }
+});
+test('native HTTP status classification retains a gateway code without storing its raw body', async () => {
+    const server = http.createServer((request, response) => {
+        request.resume(); request.on('end', () => { response.writeHead(502, { 'content-type': 'text/html' }); response.end('DO_NOT_LOG_RAW_BODY'); });
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}/Reviews/Example-Reviews-E123.htm`;
+    const tier = { label: `status-${server.address().port}`, stickySession: false, bootstrap: false, htmlFallback: false,
+        requestTimeoutMs: 1_000, ignoreTlsErrors: false };
+    try {
+        await assert.rejects(fetchBff(tier, url, 123, 1, 10, 'fixture'), error =>
+            isRecoverableGatewayError(error) && error.statusCode === 502 && !error.message.includes('DO_NOT_LOG_RAW_BODY'));
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

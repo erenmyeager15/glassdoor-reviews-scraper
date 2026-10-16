@@ -112,7 +112,7 @@ function absoluteGlassdoorUrl(value: string | null, baseUrl: string): string | n
 }
 
 export function isBlockedGlassdoorPage(statusCode: number, html: string): boolean {
-    if ([401, 403, 429].includes(statusCode)) return true;
+    if ([401, 403, 407, 412, 429, 451].includes(statusCode)) return true;
     const sample = html.slice(0, 80_000);
     return /<title>\s*(?:Security \| Glassdoor|Just a moment)/i.test(sample)
         || /\bHumans only\b|Enable JavaScript and cookies to continue|cf-chl-/i.test(sample);
