@@ -23,7 +23,9 @@
     "typescript": "^5.6.0"
   },
   "overrides": {
-    "basic-ftp": "6.2.3"
+    "basic-ftp": "6.2.5",
+    "follow-redirects": "1.16.2",
+    "ip-address": "10.7.5"
   },
   "author": "Md Jakaria Mirza",
   "license": "Apache-2.0",

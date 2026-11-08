@@ -136,7 +136,7 @@ export interface AccessEvidence {
     pagesFetched: number;
     complete: boolean;
     warning?: string;
-    gatewayRecovery?: { originalStatusCode: number; originalSource: 'bff'; recoveredSource: 'html'; requestLimit: 1 };
+    gatewayRecovery?: { originalStatusCode: number | null; originalSource: 'bff'; recoveredSource: 'html'; requestLimit: 1 };
 }
 
 export interface CompanyReport {

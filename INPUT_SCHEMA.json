@@ -72,7 +72,7 @@
     },
     "useUnblocker": {
       "title": "Use specialist anti-blocking access",
-      "description": "Recommended sessionless Unblocker route. A first-page API gateway error (502/503/504) permits one public HTML recovery request per run on the same route; no Residential fallback or denied-access retry.",
+      "description": "Recommended sessionless Unblocker route. If the first reviews page fails with a temporary error (HTTP 403/429/5xx, timeout or dropped connection), the Actor retries it once on a fresh route (at most 2 retries per run), then tries one public HTML page (once per run). No Residential fallback.",
       "type": "boolean",
       "editor": "checkbox",
       "default": true,

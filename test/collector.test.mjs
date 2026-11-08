@@ -285,8 +285,10 @@ function recoveryHtml(ids = [11, 12, 13], morePages = false) {
         <div data-test="review-text-PROS">Helpful team</div></article>`).join('')}
         ${morePages ? '<a href="/Reviews/Example-Co-Reviews-E123_P2.htm">2</a>' : ''}`;
 }
+// Each listed error fails the first reviews API page and its one fresh-route retry,
+// so these fixtures exercise the HTML recovery that follows.
 function managedRecoveryFixture(errors, body = recoveryHtml()) {
-    const check = harness(errors);
+    const check = harness(errors.flatMap(error => [error, error]));
     check.runtime.buildAccessTiers = async () => { check.calls.access++; return [{ label: 'offline Unblocker',
         htmlFallback: false, gatewayHtmlRecovery: true }]; };
     check.htmlCalls = [];
@@ -297,27 +299,63 @@ for (const status of [502, 503, 504]) test(`one same-route public HTML request r
     const check = managedRecoveryFixture([new GlassdoorHttpError(status, 'bff', 'gateway', 'offline Unblocker')]);
     const result = await runGlassdoor(input({ maxReviewsPerCompany: 3 }), check.runtime);
     assert.equal(result.status, 'COMPLETE'); assert.equal(result.reviewsEmitted, 3);
-    assert.equal(check.calls.requests.length, 1); assert.equal(check.htmlCalls.length, 1); assert.equal(check.calls.writes, 1);
+    assert.equal(check.calls.requests.length, 2); assert.equal(check.htmlCalls.length, 1); assert.equal(check.calls.writes, 1);
+    assert.equal(result.apiRetriesAttempted, 1); assert.equal(result.apiRetriesSucceeded, 0);
     assert.equal(result.gatewayRecoveriesAttempted, 1); assert.equal(result.gatewayRecoveriesSucceeded, 1);
     const report = check.values.get('MONITORING-REPORT').companies[0];
     assert.equal(report.source, 'html'); assert.equal(report.gatewayRecovery.originalStatusCode, status);
     assert.equal(report.gatewayRecovery.requestLimit, 1); assert.match(report.warning, /recovered using one public HTML/);
 });
-for (const status of [401, 403, 407, 412, 429, 451]) test(`managed access does not recover blocked/rate-limited HTTP ${status}`, async () => {
+for (const status of [401, 407, 412, 451]) test(`managed access never retries or recovers HTTP ${status}`, async () => {
     const check = managedRecoveryFixture([new GlassdoorHttpError(status, 'bff', 'blocked', 'offline Unblocker')]);
     const result = await runGlassdoor(input({}), check.runtime);
     assert.equal(result.status, 'FAILED'); assert.equal(check.htmlCalls.length, 0); assert.equal(check.rows.length, 0);
+    assert.equal(check.calls.requests.length, 1); assert.equal(result.apiRetriesAttempted, 0);
 });
 for (const error of [new Error('HTTP 502'), new Error('Request timeout'),
-    new GlassdoorHttpError(502, 'bff', 'blocked', 'offline Unblocker'),
-    new GlassdoorHttpError(500, 'bff', 'http', 'offline Unblocker'),
-    new GlassdoorHttpError(502, 'html', 'gateway', 'offline Unblocker')]) {
-    test(`untrusted error text, timeout, denial or wrong operation cannot trigger recovery: ${error.name}/${error.message}`, async () => {
+    new GlassdoorHttpError(400, 'bff', 'http', 'offline Unblocker'),
+    new GlassdoorHttpError(404, 'bff', 'http', 'offline Unblocker')]) {
+    test(`untrusted error text or a permanent status cannot trigger a retry or recovery: ${error.name}/${error.message}`, async () => {
         const check = managedRecoveryFixture([error]);
         const result = await runGlassdoor(input({}), check.runtime);
         assert.equal(result.status, 'FAILED'); assert.equal(check.htmlCalls.length, 0);
+        assert.equal(check.calls.requests.length, 1);
     });
 }
+const timeoutError = () => Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+for (const [label, error] of [['HTTP 502', new GlassdoorHttpError(502, 'bff', 'gateway', 'offline Unblocker')],
+    ['HTTP 403', new GlassdoorHttpError(403, 'bff', 'blocked', 'offline Unblocker')],
+    ['HTTP 429', new GlassdoorHttpError(429, 'bff', 'blocked', 'offline Unblocker')],
+    ['request timeout', timeoutError()],
+    ['dropped proxy connection', new Error('Failed to connect to the server.\nReason: Connect')]]) {
+    test(`a first-page ${label} is retried once on a fresh route and the API result is kept`, async () => {
+        const check = managedRecoveryFixture([]);
+        const pages = [error, page([1, 2, 3], { total: 3 })];
+        check.runtime.fetchBff = async (...args) => { check.calls.requests.push(args); const next = pages.shift(); if (next instanceof Error) throw next; return next; };
+        const result = await runGlassdoor(input({ maxReviewsPerCompany: 3 }), check.runtime);
+        assert.equal(result.status, 'COMPLETE'); assert.equal(result.reviewsEmitted, 3); assert.equal(check.htmlCalls.length, 0);
+        assert.equal(check.calls.requests.length, 2); assert.notEqual(check.calls.requests[0][5], check.calls.requests[1][5]);
+        assert.equal(result.apiRetriesAttempted, 1); assert.equal(result.apiRetriesSucceeded, 1); assert.equal(check.calls.writes, 1);
+        const report = check.values.get('MONITORING-REPORT').companies[0];
+        assert.equal(report.source, 'bff'); assert.match(report.warning, /one retry on a fresh access route succeeded/);
+    });
+}
+test('fresh-route API retries are capped per run across companies', async () => {
+    const companies = [companyUrl, secondCompanyUrl, 'https://www.glassdoor.com/Reviews/Third-Co-Reviews-E125.htm'];
+    const check = managedRecoveryFixture([]);
+    check.runtime.fetchBff = async (...args) => { check.calls.requests.push(args); throw new GlassdoorHttpError(502, 'bff', 'gateway', 'offline'); };
+    check.runtime.fetchHtml = async (...args) => { check.htmlCalls.push(args); throw new Error('Recovery HTTP 502'); };
+    const result = await runGlassdoor(input({ companyUrls: companies }), check.runtime);
+    assert.equal(result.status, 'FAILED'); assert.equal(result.apiRetriesAttempted, 2);
+    assert.equal(check.calls.requests.length, 5); assert.equal(check.htmlCalls.length, 1); assert.equal(check.rows.length, 0);
+});
+test('a timeout recovers through HTML without a numeric gateway status', async () => {
+    const check = managedRecoveryFixture([timeoutError()]);
+    const result = await runGlassdoor(input({ maxReviewsPerCompany: 3 }), check.runtime);
+    assert.equal(result.status, 'COMPLETE'); assert.equal(check.htmlCalls.length, 1);
+    const report = check.values.get('MONITORING-REPORT').companies[0];
+    assert.equal(report.gatewayRecovery.originalStatusCode, null); assert.match(report.warning, /timeout; recovered using one public HTML/);
+});
 test('managed recovery fetches only one HTML page and holds partial history', async () => {
     const check = managedRecoveryFixture([new GlassdoorHttpError(502, 'bff', 'gateway', 'offline')], recoveryHtml([11], true));
     const result = await runGlassdoor(input({ maxReviewsPerCompany: 3 }), check.runtime);
@@ -328,7 +366,8 @@ test('a second company cannot consume another managed gateway recovery', async (
     const check = managedRecoveryFixture([new GlassdoorHttpError(502, 'bff', 'gateway', 'offline'), new GlassdoorHttpError(503, 'bff', 'gateway', 'offline')]);
     const result = await runGlassdoor(input({ companyUrls: [companyUrl, secondCompanyUrl] }), check.runtime);
     assert.equal(result.status, 'PARTIAL'); assert.equal(result.failedCompanies, 1); assert.equal(check.htmlCalls.length, 1);
-    assert.equal(result.gatewayRecoveriesAttempted, 1); assert.equal(check.calls.requests.length, 2);
+    assert.equal(result.gatewayRecoveriesAttempted, 1); assert.equal(check.calls.requests.length, 4);
+    assert.equal(result.apiRetriesAttempted, 2);
 });
 for (const body of ['<html>Client shell without reviews</html>', '<script>{"employerReviews":{}}</script>',
     '<article data-test="review-detail" data-brandviews="review_id=11"></article>']) {
@@ -343,7 +382,7 @@ test('failure of the single recovery does not retry or fabricate rows', async ()
     const check = managedRecoveryFixture([new GlassdoorHttpError(502, 'bff', 'gateway', 'offline')]);
     check.runtime.fetchHtml = async (...args) => { check.htmlCalls.push(args); throw new Error('Recovery HTTP 502'); };
     const result = await runGlassdoor(input({}), check.runtime);
-    assert.equal(result.status, 'FAILED'); assert.equal(check.htmlCalls.length, 1); assert.equal(check.calls.requests.length, 1);
+    assert.equal(result.status, 'FAILED'); assert.equal(check.htmlCalls.length, 1); assert.equal(check.calls.requests.length, 2);
     assert.equal(result.reviewsEmitted, 0); assert.match(result.failures[0].reason, /Single gateway HTML recovery/);
 });
 test('gateway recovery stops when the original request has consumed the total deadline', async () => {

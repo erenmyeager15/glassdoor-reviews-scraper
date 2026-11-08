@@ -1,7 +1,7 @@
 import type { ActorInput, AccessEvidence, CompanyReport, CompanySummary, CompanyWatchState, NormalizedInput, ParsedReviewPage } from './types.js';
 import { normalizeCompanyUrl, normalizeInput } from './input.js';
 import type { AccessTier, fetchBff, fetchHtml, resolveCompanyName } from './access.js';
-import { isRecoverableGatewayError } from './access.js';
+import { httpStatusOf, isTransientManagedError } from './access.js';
 import {
     applyReviewFilters,
     employerIdFromUrl,
@@ -17,6 +17,20 @@ interface CollectionResult {
     page: ParsedReviewPage;
     evidence: AccessEvidence;
 }
+
+interface RecoveryBudget {
+    /** HTML recovery requests left for the whole run. */
+    remaining: number;
+    /** Fresh-route retries of a failed first reviews API page left for the whole run. */
+    apiRetries: number;
+    apiRetriesAttempted: number;
+    apiRetriesSucceeded: number;
+}
+
+// A managed request can take up to 75 s; do not start a recovery request with
+// less time left than a typical successful one needs.
+const MIN_RECOVERY_WINDOW_MS = 20_000;
+const API_RETRIES_PER_RUN = 2;
 
 export function safeFailureReason(error: unknown): string {
     return (error instanceof Error ? error.message : String(error))
@@ -200,7 +214,7 @@ async function collectCompany(
     input: NormalizedInput,
     deadline: number,
     runtime: CollectorRuntime,
-    recoveryBudget: { remaining: number },
+    recoveryBudget: RecoveryBudget,
 ): Promise<CollectionResult> {
     const companyKey = (employerIdFromUrl(companyUrl) ?? companyUrl.length).toString(36);
     const errors: string[] = [];
@@ -216,20 +230,37 @@ async function collectCompany(
                     : await collectBff(tier, companyUrl, input, deadline, sessionId, runtime);
             } catch (error) {
                 errors.push(`${tier.label} ${method === 'html' ? 'HTML' : 'reviews API'}: ${safeFailureReason(error)}`);
-                if (method === 'bff' && tier.gatewayHtmlRecovery && !tier.htmlFallback
-                    && isRecoverableGatewayError(error) && recoveryBudget.remaining > 0
-                    && runtime.now() + 1_000 < deadline && remainingReviews(runtime) > 0) {
-                    // One public HTML page, once per run, on the same managed route.
-                    // Never a retry of the failed POST, IP/provider switch or blocked-access fallback.
+                if (method !== 'bff' || !tier.gatewayHtmlRecovery || tier.htmlFallback) continue;
+                let lastError: unknown = error;
+                const canSpend = () => runtime.now() + MIN_RECOVERY_WINDOW_MS < deadline && remainingReviews(runtime) > 0;
+                // 1. Retry the first reviews API page once on a fresh sessionless
+                //    Unblocker route. Live 8 Nov 2026: 1 of 3 prefilled runs got a 502 here.
+                if (isTransientManagedError(error) && recoveryBudget.apiRetries > 0 && canSpend()) {
+                    recoveryBudget.apiRetries--;
+                    recoveryBudget.apiRetriesAttempted++;
+                    try {
+                        const retried = await collectBff(tier, companyUrl, input, deadline, `${sessionId}_retry`, runtime);
+                        recoveryBudget.apiRetriesSucceeded++;
+                        const message = `First reviews API request failed (${safeFailureReason(error)}); one retry on a fresh access route succeeded.`;
+                        retried.evidence.warning = [message, retried.evidence.warning].filter(Boolean).join(' ');
+                        return retried;
+                    } catch (retryError) {
+                        errors.push(`Fresh-route reviews API retry: ${safeFailureReason(retryError)}`);
+                        lastError = retryError;
+                    }
+                }
+                // 2. One public HTML page, once per run, on the same managed route.
+                if (isTransientManagedError(lastError) && recoveryBudget.remaining > 0 && canSpend()) {
                     recoveryBudget.remaining--;
                     try {
-                        const recovered = await collectHtml(tier, companyUrl, input, deadline, sessionId, runtime, 1);
+                        const recovered = await collectHtml(tier, companyUrl, input, deadline, `${sessionId}_html`, runtime, 1);
                         if (!recovered.page.reviews.length || recovered.page.reviews.some(review =>
                             !review.headline && !review.pros && !review.cons && review.overallRating === null)) {
                             throw new Error('Gateway recovery returned no usable review content; empty success is not permitted.');
                         }
-                        const message = `Reviews API HTTP ${error.statusCode}; recovered using one public HTML request on the same access route.`;
-                        recovered.evidence.gatewayRecovery = { originalStatusCode: error.statusCode, originalSource: 'bff', recoveredSource: 'html', requestLimit: 1 };
+                        const status = httpStatusOf(lastError);
+                        const message = `Reviews API ${status ? `HTTP ${status}` : safeFailureReason(lastError)}; recovered using one public HTML request on the same access route.`;
+                        recovered.evidence.gatewayRecovery = { originalStatusCode: status, originalSource: 'bff', recoveredSource: 'html', requestLimit: 1 };
                         recovered.evidence.warning = [message, recovered.evidence.warning].filter(Boolean).join(' ');
                         return recovered;
                     } catch (recoveryError) {
@@ -290,7 +321,7 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
     let outputBillingFailure: string | null = null;
     let attemptedCompanies = 0;
     let stoppedAtTimeLimit = false;
-    const recoveryBudget = { remaining: 1 };
+    const recoveryBudget: RecoveryBudget = { remaining: 1, apiRetries: API_RETRIES_PER_RUN, apiRetriesAttempted: 0, apiRetriesSucceeded: 0 };
 
     for (let index = 0; index < uniqueUrls.length; index++) {
         const companyUrl = uniqueUrls[index];
@@ -426,6 +457,8 @@ export async function runGlassdoor(rawInput: ActorInput, runtime: CollectorRunti
         stateWriteFailures,
         gatewayRecoveriesAttempted: 1 - recoveryBudget.remaining,
         gatewayRecoveriesSucceeded: reports.filter(report => report.gatewayRecovery).length,
+        apiRetriesAttempted: recoveryBudget.apiRetriesAttempted,
+        apiRetriesSucceeded: recoveryBudget.apiRetriesSucceeded,
         unattemptedCompanies: uniqueUrls.length - attemptedCompanies,
         ...(outputBillingFailure ? { failureStage: 'OUTPUT_BILLING', outputBillingFailure } : {}),
         ...(!outputBillingFailure && reportExportFailure ? { failureStage: 'REPORT_EXPORT', reportExportFailure } : {}),

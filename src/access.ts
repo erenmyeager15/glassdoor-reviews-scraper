@@ -57,6 +57,35 @@ export function isRecoverableGatewayError(error: unknown): error is GlassdoorHtt
         && error.kind === 'gateway' && [502, 503, 504].includes(error.statusCode);
 }
 
+/** A reviews page that came back without review content (for example a challenge
+ * shell). On the sessionless Unblocker route the next request gets a new route. */
+export class TransientSourceError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'TransientSourceError';
+    }
+}
+
+// Statuses that a fresh sessionless Unblocker route can clear. 401/407/412/451
+// (authentication, proxy credentials, preconditions, legal) are never retried.
+const TRANSIENT_MANAGED_STATUSES = new Set([403, 429, 500, 502, 503, 504]);
+
+/** Typed errors only: response text never selects a retry. */
+export function isTransientManagedError(error: unknown): boolean {
+    if (error instanceof GlassdoorHttpError) return TRANSIENT_MANAGED_STATUSES.has(error.statusCode);
+    if (error instanceof TransientSourceError) return true;
+    if (!(error instanceof Error)) return false;
+    // AbortSignal.timeout() raises a DOMException named TimeoutError; impit reports
+    // a dropped proxy connection as "Failed to connect to the server".
+    return error.name === 'TimeoutError'
+        || error.message === 'The operation was aborted due to timeout'
+        || error.message.startsWith('Failed to connect to the server');
+}
+
+export function httpStatusOf(error: unknown): number | null {
+    return error instanceof GlassdoorHttpError ? error.statusCode : null;
+}
+
 function proxyLabel(value: ProxyConfigInput): string {
     if (value.proxyUrls?.length) return 'custom proxy';
     if (value.useApifyProxy === false) return 'direct';
@@ -261,7 +290,8 @@ export async function fetchBff(tier: AccessTier, companyUrl: string, employerId:
     try {
         parsed = JSON.parse(response.body);
     } catch {
-        throw new Error('Glassdoor reviews API returned non-JSON content.');
+        // Usually an interstitial page served on one route; a fresh route can pass.
+        throw new TransientSourceError('Glassdoor reviews API returned non-JSON content.');
     }
     if (parsed && typeof parsed === 'object' && 'errors' in parsed) throw new Error('Glassdoor reviews API returned an application error.');
     return parsed;
