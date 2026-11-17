@@ -31,8 +31,8 @@ interface RecoveryBudget {
 // A managed request can take up to 75 s; do not start a recovery request with
 // less time left than a typical successful one needs.
 const MIN_RECOVERY_WINDOW_MS = 20_000;
-const API_RETRIES_PER_RUN = 3;
-const HTML_RECOVERIES_PER_RUN = 2;
+const API_RETRIES_PER_RUN = 4;
+const HTML_RECOVERIES_PER_RUN = 3;
 
 export function safeFailureReason(error: unknown): string {
     return (error instanceof Error ? error.message : String(error))
@@ -216,16 +216,16 @@ async function collectHtml(
 // page returned HTTP 502 or timed out after 18-75 s each, and 3 of 5 prefilled
 // runs on 1.7.1 failed after one API retry plus one HTML page. Failed managed
 // requests used no Unblocker units in those runs, so keep trying within a fixed
-// per-run budget, two requests at a time, until one succeeds.
-export const RECOVERY_HEDGE_DELAY_MS = 25_000;
-const MAX_IN_FLIGHT = 2;
+// per-run budget, up to three requests at a time, until one succeeds.
+export const RECOVERY_HEDGE_DELAY_MS = 15_000;
+const MAX_IN_FLIGHT = 3;
 // Stop starting recovery requests this long before the run deadline, so the run
 // still writes its reports inside Apify's 5-minute QA limit.
 const MANAGED_DEADLINE_RESERVE_MS = 30_000;
 
 /** Sessionless Unblocker route: the first API page, then on a temporary error
  * further fresh-route attempts alternating API retries and public HTML pages,
- * up to two in flight (a second starts when one has been pending for the hedge
+ * up to three in flight (another starts while one has been pending for the hedge
  * delay). The first success wins; only its rows are saved and charged. */
 async function collectManaged(
     tier: AccessTier,
@@ -250,11 +250,14 @@ async function collectManaged(
     const canSpend = () => runtime.now() + MIN_RECOVERY_WINDOW_MS < attemptDeadline && remainingReviews(runtime) > 0;
     let preferApi = true;
     let attempt = 0;
+    let lastAttemptWasHtml = false;
+    let lastFailure: unknown = null;
 
     const nextAttempt = (): Promise<CollectionResult> | null => {
         if (!isTransientManagedError(lastError) || !canSpend()) return null;
         const useHtml = recoveryBudget.remaining > 0 && (!preferApi || recoveryBudget.apiRetries <= 0);
         attempt += 1;
+        lastAttemptWasHtml = useHtml;
         if (useHtml) {
             recoveryBudget.remaining--;
             recoveryBudget.htmlAttempted++;
@@ -304,18 +307,22 @@ async function collectManaged(
             if (settled) return;
             const pending = nextAttempt();
             if (!pending) {
-                if (inFlight === 0) finish(() => reject(lastError));
+                if (inFlight === 0) finish(() => reject(lastFailure ?? lastError));
                 return;
             }
             inFlight += 1;
             armHedge();
+            const htmlAttempt = lastAttemptWasHtml;
             pending.then(result => { inFlight -= 1; finish(() => resolve(result)); }, error => {
                 inFlight -= 1;
-                lastError = error;
+                // A failed HTML page (non-HTTP parse/identity error) must not end
+                // the run while API retries remain; only API errors gate retries.
+                if (!htmlAttempt || isTransientManagedError(error)) lastError = error;
+                else lastFailure = error;
                 if (settled) return;
                 if (inFlight < MAX_IN_FLIGHT) launch();
                 if (!settled) {
-                    if (inFlight === 0) finish(() => reject(lastError));
+                    if (inFlight === 0) finish(() => reject(lastFailure ?? lastError));
                     else armHedge();
                 }
             });

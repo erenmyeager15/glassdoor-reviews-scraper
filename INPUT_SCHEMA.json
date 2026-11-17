@@ -72,7 +72,7 @@
     },
     "useUnblocker": {
       "title": "Use specialist anti-blocking access",
-      "description": "Recommended sessionless Unblocker route. If the first reviews page fails with a temporary error (HTTP 403/429/5xx, timeout or dropped connection), the Actor retries on fresh routes, alternating API and public HTML pages, two at a time at most (up to 3 API retries and 2 HTML pages per run). No Residential fallback.",
+      "description": "Recommended sessionless Unblocker route. If the first reviews page fails with a temporary error (HTTP 403/429/5xx, timeout or dropped connection), the Actor retries on fresh routes, alternating API and public HTML pages, three at a time at most (up to 4 API retries and 3 HTML pages per run). No Residential fallback.",
       "type": "boolean",
       "editor": "checkbox",
       "default": true,
