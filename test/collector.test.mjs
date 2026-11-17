@@ -425,3 +425,25 @@ test('gateway recovery cannot mislabel another employer or an off-domain redirec
         assert.equal(check.htmlCalls.length, 1); assert(!JSON.stringify(result).includes('private:secret'));
     }
 });
+test('a slow fresh-route retry does not delay the HTML recovery past the hedge delay', async () => {
+    const check = managedRecoveryFixture([]);
+    let calls = 0;
+    check.runtime.recoveryHedgeDelayMs = 20;
+    // First API page fails at once; the retry hangs, as a stalled Unblocker request would.
+    check.runtime.fetchBff = (...args) => { check.calls.requests.push(args); calls++;
+        return calls === 1 ? Promise.reject(new GlassdoorHttpError(502, 'bff', 'gateway', 'offline')) : new Promise(() => {}); };
+    const started = Date.now();
+    const result = await runGlassdoor(input({ maxReviewsPerCompany: 3 }), check.runtime);
+    assert.ok(Date.now() - started < 2000, 'HTML recovery started without waiting for the stalled retry');
+    assert.equal(result.status, 'COMPLETE'); assert.equal(result.reviewsEmitted, 3);
+    assert.equal(check.htmlCalls.length, 1); assert.equal(result.apiRetriesAttempted, 1);
+    assert.equal(check.rows.length, 3, 'only the winning response is saved and charged');
+});
+test('a retry that succeeds before the hedge delay never starts the HTML request', async () => {
+    const check = managedRecoveryFixture([]);
+    const pages = [new GlassdoorHttpError(502, 'bff', 'gateway', 'offline'), page([1, 2, 3], { total: 3 })];
+    check.runtime.recoveryHedgeDelayMs = 5_000;
+    check.runtime.fetchBff = async (...args) => { check.calls.requests.push(args); const next = pages.shift(); if (next instanceof Error) throw next; return next; };
+    const result = await runGlassdoor(input({ maxReviewsPerCompany: 3 }), check.runtime);
+    assert.equal(result.status, 'COMPLETE'); assert.equal(check.htmlCalls.length, 0); assert.equal(result.apiRetriesSucceeded, 1);
+});

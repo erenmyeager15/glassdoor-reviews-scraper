@@ -63,6 +63,8 @@ export interface CollectorRuntime {
     setValue(key: string, value: unknown, options?: { contentType: string }): Promise<void>;
     setStatus(message: string): Promise<void>;
     warn(message: string): void;
+    /** Test hook; defaults to RECOVERY_HEDGE_DELAY_MS. */
+    recoveryHedgeDelayMs?: number;
 }
 
 function aggregatePages(pages: ParsedReviewPage[], input: NormalizedInput): ParsedReviewPage {
@@ -208,6 +210,114 @@ async function collectHtml(
     };
 }
 
+// Live 17 Nov 2026: a prefilled run spent 198 s going API (502) -> API retry
+// (502) -> HTML page, one after another, each request allowed up to 75 s.
+// Start the HTML recovery alongside a slow retry instead of after it fails.
+export const RECOVERY_HEDGE_DELAY_MS = 25_000;
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+const settle = <T>(promise: Promise<T>): Promise<Settled<T>> =>
+    promise.then(value => ({ ok: true as const, value }), error => ({ ok: false as const, error }));
+
+function cancellableDelay(ms: number): { promise: Promise<null>; cancel: () => void } {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const promise = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), ms); });
+    return { promise, cancel: () => clearTimeout(timer) };
+}
+
+/** Sessionless Unblocker route: first API page, then (on a temporary error) a
+ * fresh-route API retry and, if that fails or is still pending after the hedge
+ * delay, one public HTML page. Bounded by the run budgets; first success wins. */
+async function collectManaged(
+    tier: AccessTier,
+    companyUrl: string,
+    input: NormalizedInput,
+    deadline: number,
+    sessionId: string,
+    runtime: CollectorRuntime,
+    recoveryBudget: RecoveryBudget,
+    errors: string[],
+): Promise<CollectionResult> {
+    let firstError: unknown;
+    try {
+        return await collectBff(tier, companyUrl, input, deadline, sessionId, runtime);
+    } catch (error) {
+        firstError = error;
+        errors.push(`${tier.label} reviews API: ${safeFailureReason(error)}`);
+    }
+    if (!isTransientManagedError(firstError)) throw firstError;
+    const canSpend = () => runtime.now() + MIN_RECOVERY_WINDOW_MS < deadline && remainingReviews(runtime) > 0;
+
+    let retryError: unknown = null;
+    let retry: Promise<CollectionResult> | null = null;
+    if (recoveryBudget.apiRetries > 0 && canSpend()) {
+        recoveryBudget.apiRetries--;
+        recoveryBudget.apiRetriesAttempted++;
+        retry = collectBff(tier, companyUrl, input, deadline, `${sessionId}_retry`, runtime).then(result => {
+            recoveryBudget.apiRetriesSucceeded++;
+            const message = `First reviews API request failed (${safeFailureReason(firstError)}); one retry on a fresh access route succeeded.`;
+            result.evidence.warning = [message, result.evidence.warning].filter(Boolean).join(' ');
+            return result;
+        }, error => {
+            retryError = error;
+            errors.push(`Fresh-route reviews API retry: ${safeFailureReason(error)}`);
+            throw error;
+        });
+    }
+
+    const startHtml = (): Promise<CollectionResult> | null => {
+        const cause = retryError ?? firstError;
+        if (!isTransientManagedError(cause) || recoveryBudget.remaining <= 0 || !canSpend()) return null;
+        recoveryBudget.remaining--;
+        return collectHtml(tier, companyUrl, input, deadline, `${sessionId}_html`, runtime, 1).then(recovered => {
+            if (!recovered.page.reviews.length || recovered.page.reviews.some(review =>
+                !review.headline && !review.pros && !review.cons && review.overallRating === null)) {
+                throw new Error('Gateway recovery returned no usable review content; empty success is not permitted.');
+            }
+            const status = httpStatusOf(cause);
+            const message = `Reviews API ${status ? `HTTP ${status}` : safeFailureReason(cause)}; recovered using one public HTML request on the same access route.`;
+            recovered.evidence.gatewayRecovery = { originalStatusCode: status, originalSource: 'bff', recoveredSource: 'html', requestLimit: 1 };
+            recovered.evidence.warning = [message, recovered.evidence.warning].filter(Boolean).join(' ');
+            return recovered;
+        }).catch(error => {
+            errors.push(`Single gateway HTML recovery: ${safeFailureReason(error)}`);
+            throw error;
+        });
+    };
+
+    if (!retry) {
+        const html = startHtml();
+        if (!html) throw firstError;
+        return await html;
+    }
+    const retryOutcome = settle(retry);
+    const hedge = cancellableDelay(runtime.recoveryHedgeDelayMs ?? RECOVERY_HEDGE_DELAY_MS);
+    const early = await Promise.race([retryOutcome, hedge.promise]);
+    hedge.cancel();
+    if (early?.ok) return early.value;
+    const html = startHtml();
+    if (!html) {
+        const outcome = early ?? await retryOutcome;
+        if (outcome.ok) return outcome.value;
+        throw outcome.error;
+    }
+    // Retry still pending: the first of the two to succeed wins.
+    const candidates = early ? [settle(html)] : [retryOutcome, settle(html)];
+    const outcomes = await new Promise<Settled<CollectionResult>[]>(resolve => {
+        const done: Settled<CollectionResult>[] = [];
+        for (const candidate of candidates) {
+            void candidate.then(outcome => {
+                if (outcome.ok) resolve([outcome]);
+                done.push(outcome);
+                if (done.length === candidates.length) resolve(done);
+            });
+        }
+    });
+    const winner = outcomes.find(outcome => outcome.ok);
+    if (winner?.ok) return winner.value;
+    throw (outcomes.at(-1) as { error: unknown }).error;
+}
+
 async function collectCompany(
     companyUrl: string,
     tiers: AccessTier[],
@@ -224,49 +334,19 @@ async function collectCompany(
         const methods = tier.htmlFallback ? (['bff', 'html'] as const) : (['bff'] as const);
         for (const method of methods) {
             if (runtime.now() >= deadline) throw new Error('Stopped before another access attempt at the configured run-time limit.');
+            if (method === 'bff' && tier.gatewayHtmlRecovery && !tier.htmlFallback) {
+                try {
+                    return await collectManaged(tier, companyUrl, input, deadline, sessionId, runtime, recoveryBudget, errors);
+                } catch {
+                    continue;
+                }
+            }
             try {
                 return method === 'html'
                     ? await collectHtml(tier, companyUrl, input, deadline, sessionId, runtime)
                     : await collectBff(tier, companyUrl, input, deadline, sessionId, runtime);
             } catch (error) {
                 errors.push(`${tier.label} ${method === 'html' ? 'HTML' : 'reviews API'}: ${safeFailureReason(error)}`);
-                if (method !== 'bff' || !tier.gatewayHtmlRecovery || tier.htmlFallback) continue;
-                let lastError: unknown = error;
-                const canSpend = () => runtime.now() + MIN_RECOVERY_WINDOW_MS < deadline && remainingReviews(runtime) > 0;
-                // 1. Retry the first reviews API page once on a fresh sessionless
-                //    Unblocker route. Live 8 Nov 2026: 1 of 3 prefilled runs got a 502 here.
-                if (isTransientManagedError(error) && recoveryBudget.apiRetries > 0 && canSpend()) {
-                    recoveryBudget.apiRetries--;
-                    recoveryBudget.apiRetriesAttempted++;
-                    try {
-                        const retried = await collectBff(tier, companyUrl, input, deadline, `${sessionId}_retry`, runtime);
-                        recoveryBudget.apiRetriesSucceeded++;
-                        const message = `First reviews API request failed (${safeFailureReason(error)}); one retry on a fresh access route succeeded.`;
-                        retried.evidence.warning = [message, retried.evidence.warning].filter(Boolean).join(' ');
-                        return retried;
-                    } catch (retryError) {
-                        errors.push(`Fresh-route reviews API retry: ${safeFailureReason(retryError)}`);
-                        lastError = retryError;
-                    }
-                }
-                // 2. One public HTML page, once per run, on the same managed route.
-                if (isTransientManagedError(lastError) && recoveryBudget.remaining > 0 && canSpend()) {
-                    recoveryBudget.remaining--;
-                    try {
-                        const recovered = await collectHtml(tier, companyUrl, input, deadline, `${sessionId}_html`, runtime, 1);
-                        if (!recovered.page.reviews.length || recovered.page.reviews.some(review =>
-                            !review.headline && !review.pros && !review.cons && review.overallRating === null)) {
-                            throw new Error('Gateway recovery returned no usable review content; empty success is not permitted.');
-                        }
-                        const status = httpStatusOf(lastError);
-                        const message = `Reviews API ${status ? `HTTP ${status}` : safeFailureReason(lastError)}; recovered using one public HTML request on the same access route.`;
-                        recovered.evidence.gatewayRecovery = { originalStatusCode: status, originalSource: 'bff', recoveredSource: 'html', requestLimit: 1 };
-                        recovered.evidence.warning = [message, recovered.evidence.warning].filter(Boolean).join(' ');
-                        return recovered;
-                    } catch (recoveryError) {
-                        errors.push(`Single gateway HTML recovery: ${safeFailureReason(recoveryError)}`);
-                    }
-                }
             }
         }
     }
